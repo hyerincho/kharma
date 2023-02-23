@@ -71,8 +71,6 @@ KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, c
     // TODO: make a diff function that calculates the constants
     Real rtol = 1.e-12;
     Real ftol = 1.e-14;
-    Real Tmin = 0.6 * (m::sqrt(C2) - 1.) / (n + 1);
-    Real Tmax = m::pow(C1 * m::sqrt(2. / m::pow(r,3)), 1. / n);
     Real Tinf = (m::sqrt(C2) - 1.) / (n + 1); // temperature at infinity
     Real Tnear = m::pow(C1 * m::sqrt(2. / m::pow(r,3)), 1. / n); // temperature near the BH
     Real Tmin, Tmax;
