@@ -9,7 +9,7 @@ DIM=3
 NZONES=2 #7
 BASE=8
 NRUNS=2
-START_RUN=0
+START_RUN=0 # if this is not 0, then update start_time, out_to_in, iteration, r_out, r_in to values that you are re-starting from  
 DRTAG="bondi_multizone_021823_sane_b_clean"
 
 # Set paths
@@ -21,11 +21,11 @@ parfilename="${PDR}/sane_save.par" # parameter file
 
 # other values determined automatically
 turn_around=$(($NZONES-1))
-start_time=0
+start_time=0 #11556 #
 out_to_in=1
 iteration=1
-r_out=$((${BASE}**($turn_around+2)))
-r_in=$((${BASE}**$turn_around))
+r_out=$((${BASE}**($turn_around+2))) #64 #
+r_in=$((${BASE}**$turn_around)) #1 #
 
 # if the directories are not present, make them.
 if [ ! -d "${DR}" ]; then
@@ -49,7 +49,7 @@ do
   
   # set problem type and cleanup
   if [ $VAR -eq 0 ]; then
-    prob="torus" #"bondi"
+    prob="bondi" #"torus" #
     init_c=0
   else
     prob="resize_restart_kharma"
@@ -106,6 +106,7 @@ do
                                     coordinates/r_in=${r_in} coordinates/r_out=${r_out} \
                                     bondi/vacuum_logrho=-8.2014518 bondi/vacuum_log_u_over_rho=${log_u_over_rho} \
                                     b_field/fix_flux_x1=0 b_field/initial_cleanup=$init_c \
+                                    b_field/type=vertical b_field/solver=flux_ct \
                                     parthenon/output0/dt=$output0_dt \
                                     parthenon/output1/dt=$output1_dt \
                                     parthenon/output2/dt=$output2_dt \
@@ -114,7 +115,6 @@ do
                                     #parthenon/mesh/nx1=64 parthenon/mesh/nx2=64 parthenon/mesh/nx3=64 \
                                     #parthenon/meshblock/nx1=32 parthenon/meshblock/nx2=32 parthenon/meshblock/nx3=64 \
                                     #coordinates/r_in=${r_in} coordinates/r_out=${r_out} coordinates/a=$spin \
-                                    #b_field/type=vertical b_field/solver=flux_ct \
 
   if [ $VAR -ne 0 ]; then
     if [ $(($VAR % ($NZONES-1))) -eq 0 ]; then
