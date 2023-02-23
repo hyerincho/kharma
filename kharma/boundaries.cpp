@@ -47,6 +47,7 @@
 #include "bondi.hpp"
 #include "emhd/conducting_atmosphere.hpp"
 #include "emhd/bondi_viscous.hpp"
+#include "resize_restart_kharma.hpp" // Hyerin
 //#include "hubble.hpp"
 
 // Going to need all modules' headers here
@@ -152,6 +153,8 @@ void ReflectX2(std::shared_ptr<MeshBlockData<Real>> &rc, IndexDomain domain, boo
     auto bounds = coarse ? pmb->c_cellbounds : pmb->cellbounds;
     const auto& G = pmb->coords;
     const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
+    Real x1min = pmb->packages.Get("GRMHD")->Param<Real>("x1min"); //Hyerin
+    Real x_EH = pmb->packages.Get("GRMHD")->Param<Real>("x_EH"); //Hyerin
 
     // q will actually have *both* cons & prims (unless using imex driver)
     // We'll only need cons.B specifically tho
@@ -179,9 +182,12 @@ void ReflectX2(std::shared_ptr<MeshBlockData<Real>> &rc, IndexDomain domain, boo
     // Side note: this *lags* the X1/X2 corner zones by one step, since X1 is applied first.
     // this is potentially bad
     int ics = (pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user) ? is : is_e;
-    int ice = (pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user) ? ie : ie_e;
+    //int ice = (pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user) ? ie : ie_e;
     //int ics = is_e;
-    //int ice = ie_e;
+    int ice = ie_e;
+    if (x1min > x_EH) {
+        ics = is_e; // overwrite the starting index such that the reflectx2 is also applied to outermost and innermost bdry
+    }
 
     int ref_tmp, add_tmp, jbs, jbe;
     if (domain == IndexDomain::inner_x2) {
@@ -226,10 +232,16 @@ void KBoundaries::InnerX1(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse)
     // TODO implement as named callback, give combo start/bound problems their own "packages"
     auto pmb = rc->GetBlockPointer();
     std::string prob = pmb->packages.Get("GRMHD")->Param<std::string>("problem");
+    Real x1min = pmb->packages.Get("GRMHD")->Param<Real>("x1min"); //Hyerin
     if (prob == "hubble") {
        //SetHubble(rc.get(), IndexDomain::inner_x1, coarse);
     } else if (prob == "conducting_atmosphere"){
         dirichlet_bc(rc.get(), IndexDomain::inner_x1, coarse);
+    } else if ((prob == "resize_restart_kharma")&& (x1min>1)){
+        // Hyerin (if the inner x1 bound is far from BH, constant bc)
+        SetKharmaRestart(rc.get(), IndexDomain::inner_x1,coarse);
+    } else if ((prob == "bondi") && (x1min>1)){ // Hyerin
+        SetBondi(rc.get(), IndexDomain::inner_x1,coarse);
     } else {
         OutflowX1(rc, IndexDomain::inner_x1, coarse);
     }
@@ -250,6 +262,8 @@ void KBoundaries::OuterX1(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse)
         dirichlet_bc(rc.get(), IndexDomain::outer_x1, coarse);
     } else if (prob == "bondi_viscous") {
         SetBondiViscous(rc.get(), IndexDomain::outer_x1, coarse);
+    } else if (prob == "resize_restart_kharma") { // Hyerin, constant boundary condition
+        SetKharmaRestart(rc.get(),IndexDomain::outer_x1, coarse);
     } else {
         OutflowX1(rc, IndexDomain::outer_x1, coarse);
     }
@@ -330,7 +344,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
         if (fix_flux_pole) {
             if (pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user) {
                 // This loop covers every flux we need
-                pmb->par_for("fix_flux_pole_l", 0, F.GetDim(4) - 1, ks, ke, js, js, is, ie,
+                pmb->par_for("fix_flux_pole_l", 0, F.GetDim(4) - 1, ks-1, ke+1, js, js, is-1, ie+1,
                     KOKKOS_LAMBDA_VARS {
                         F.flux(X2DIR, p, k, j, i) = 0.;
                     }
@@ -338,7 +352,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             }
 
             if (pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user) {
-                pmb->par_for("fix_flux_pole_r", 0, F.GetDim(4) - 1, ks, ke, je_l, je_l, is, ie,
+                pmb->par_for("fix_flux_pole_r", 0, F.GetDim(4) - 1, ks-1, ke+1, je_l, je_l, is, ie,
                     KOKKOS_LAMBDA_VARS {
                         F.flux(X2DIR, p, k, j, i) = 0.;
                     }

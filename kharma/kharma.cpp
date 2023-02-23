@@ -56,6 +56,7 @@
 #include "boundaries.hpp"
 #include "harm_driver.hpp"
 #include "resize_restart.hpp"
+#include "resize_restart_kharma.hpp"
 
 std::shared_ptr<StateDescriptor> KHARMA::InitializeGlobals(ParameterInput *pin)
 {
@@ -111,6 +112,9 @@ void KHARMA::FixParameters(std::unique_ptr<ParameterInput>& pin)
     std::string prob = pin->GetString("parthenon/job", "problem_id");
     if (prob == "resize_restart") {
         ReadIharmRestartHeader(pin->GetString("resize_restart", "fname"), pin);
+    }
+    if (prob == "resize_restart_kharma") {
+        ReadKharmaRestartHeader(pin->GetString("resize_restart", "fname"), pin);
     }
 
     // Then handle coordinate systems and boundaries!

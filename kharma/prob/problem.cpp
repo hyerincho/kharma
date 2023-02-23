@@ -48,6 +48,7 @@
 #include "explosion.hpp"
 #include "fm_torus.hpp"
 #include "resize_restart.hpp"
+#include "resize_restart_kharma.hpp"
 #include "kelvin_helmholtz.hpp"
 #include "bz_monopole.hpp"
 #include "mhdmodes.hpp"
@@ -119,6 +120,8 @@ void KHARMA::ProblemGenerator(MeshBlock *pmb, ParameterInput *pin)
         status = InitializeFMTorus(rc.get(), pin);
     } else if (prob == "resize_restart") {
         status = ReadIharmRestart(rc.get(), pin);
+    } else if (prob == "resize_restart_kharma") {
+        status = ReadKharmaRestart(rc.get(), pin);
     }
 
     // If we didn't initialize a problem, yell
@@ -127,7 +130,7 @@ void KHARMA::ProblemGenerator(MeshBlock *pmb, ParameterInput *pin)
     }
 
     // If we're not restarting, do any grooming of the initial conditions
-    if (prob != "resize_restart") {
+    if ((prob != "resize_restart") && (prob != "resize_restart_kharma") ) {
         // Perturb the internal energy a bit to encourage accretion
         // Note this defaults to zero & is basically turned on only for torii
         if (pin->GetOrAddReal("perturbation", "u_jitter", 0.0) > 0.0) {

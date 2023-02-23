@@ -55,7 +55,7 @@ TaskStatus InitializeBondi(MeshBlockData<Real> *rc, ParameterInput *pin);
  * 
  * Used for initialization and boundary conditions
  */
-TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain=IndexDomain::interior, bool coarse=false);
+TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain=IndexDomain::entire, bool coarse=false);
 
 /**
  * Supporting functions for Bondi flow calculations
@@ -66,8 +66,9 @@ KOKKOS_INLINE_FUNCTION Real get_Tfunc(const Real T, const GReal r, const Real C1
 {
     return m::pow(1. + (1. + n) * T, 2.) * (1. - 2. / r + m::pow(C1 / m::pow(r,2) / m::pow(T, n), 2.)) - C2;
 }
-KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, const Real n)
+KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, const Real n, const Real rs)
 {
+    // TODO: make a diff function that calculates the constants
     Real rtol = 1.e-12;
     Real ftol = 1.e-14;
     Real Tmin = 0.6 * (m::sqrt(C2) - 1.) / (n + 1);
@@ -81,6 +82,7 @@ KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, c
     f1 = get_Tfunc(T1, r, C1, C2, n);
     if (f0 * f1 > 0) return -1;
 
+    // TODO: change here!
     Th = (f1 * T0 - f0 * T1) / (f1 - f0);
     fh = get_Tfunc(Th, r, C1, C2, n);
     Real epsT = rtol * (Tmin + Tmax);
@@ -109,7 +111,7 @@ KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, c
  */
 KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P, const VarMap& m_p,
                                            const Real& gam, const SphBLCoords& bl,  const SphKSCoords& ks, 
-                                           const Real mdot, const Real rs, const int& k, const int& j, const int& i)
+                                           const Real mdot, const Real rs, const Real r_shell, const int& k, const int& j, const int& i)
 {
     // Solution constants
     // Ideally these could be cached but preformance isn't an issue here
@@ -128,7 +130,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
     // be a little cautious about initializing the Ergosphere zones
     if (ks.a > 0.1 && r < 2) return;
 
-    Real T = get_T(r, C1, C2, n);
+    Real T = get_T(r, C1, C2, n, rs);
     Real ur = -C1 / (m::pow(T, n) * m::pow(r, 2));
     Real rho = m::pow(T, n);
     Real u = rho * T * n;
