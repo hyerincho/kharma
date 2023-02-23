@@ -73,6 +73,20 @@ KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, c
     Real ftol = 1.e-14;
     Real Tmin = 0.6 * (m::sqrt(C2) - 1.) / (n + 1);
     Real Tmax = m::pow(C1 * m::sqrt(2. / m::pow(r,3)), 1. / n);
+    Real Tinf = (m::sqrt(C2) - 1.) / (n + 1); // temperature at infinity
+    Real Tnear = m::pow(C1 * m::sqrt(2. / m::pow(r,3)), 1. / n); // temperature near the BH
+    Real Tmin, Tmax;
+
+    // There are two branches of solutions (see Michel et al. 1971) and the two branches cross at rs.
+    // These bounds are set to only select the inflowing solution only.
+    if (r<rs) {
+        Tmin = Tinf;
+        Tmax = Tnear;
+    }
+    else {
+        Tmin = m::max(Tnear,Tinf);
+        Tmax = 1.;
+    }
 
     Real f0, f1, fh;
     Real T0, T1, Th;
@@ -82,13 +96,12 @@ KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, c
     f1 = get_Tfunc(T1, r, C1, C2, n);
     if (f0 * f1 > 0) return -1;
 
-    // TODO: change here!
-    Th = (f1 * T0 - f0 * T1) / (f1 - f0);
+    Th = (T0 + T1) / 2.; // a simple bisection method which is stable and fast
     fh = get_Tfunc(Th, r, C1, C2, n);
     Real epsT = rtol * (Tmin + Tmax);
     while (m::abs(Th - T0) > epsT && m::abs(Th - T1) > epsT && m::abs(fh) > ftol)
     {
-        if (fh * f0 < 0.) {
+        if (fh * f0 > 0.) {
             T0 = Th;
             f0 = fh;
         } else {
@@ -96,7 +109,7 @@ KOKKOS_INLINE_FUNCTION Real get_T(const GReal r, const Real C1, const Real C2, c
             f1 = fh;
         }
 
-        Th = (f1 * T0 - f0 * T1) / (f1 - f0);
+        Th = (T0 + T1) / 2.;
         fh = get_Tfunc(Th, r, C1, C2, n);
     }
 
@@ -137,6 +150,12 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
 
     // Set u^t to make u^r a 4-vector
     Real ucon_bl[GR_DIM] = {0, ur, 0, 0};
+    if (r<r_shell){
+        // just match at the r_shell value Hyerin (12/30/22)
+        T = get_T(r_shell, C1, C2, n, rs);
+        rho = m::pow(T, n);
+        u = rho * T * n;
+    }
     Real gcov_bl[GR_DIM][GR_DIM];
     bl.gcov_embed(Xembed, gcov_bl);
     set_ut(gcov_bl, ucon_bl);

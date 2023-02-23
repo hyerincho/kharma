@@ -109,6 +109,10 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin, Packages_t pack
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
     pkg->AddField("divB", m);
 
+    // Hyerin (12/19/22)
+    m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::FillGhost, Metadata::Vector});
+    pkg->AddField("B_Save", m);
+
     // Ensure that prims get filled
     if (!implicit_b) {
         //pkg->FillDerivedMesh = B_FluxCT::FillDerivedMesh;

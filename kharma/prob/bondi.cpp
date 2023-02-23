@@ -53,6 +53,8 @@ TaskStatus InitializeBondi(MeshBlockData<Real> *rc, ParameterInput *pin)
         pmb->packages.Get("GRMHD")->AddParam<Real>("mdot", mdot);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rs")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("rs", rs);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("r_shell")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("r_shell", r_shell);
 
     // Set the whole domain to the analytic solution to begin
     SetBondi(rc);
