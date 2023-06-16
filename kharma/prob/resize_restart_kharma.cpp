@@ -135,6 +135,29 @@ void ReadKharmaRestartHeader(std::string fname, std::unique_ptr<ParameterInput>&
 
     // close hdf5 file to prevent HDF5 hangs and corrupted files
     restartReader = nullptr;
+
+    // fname_fill1
+    Real fx1min_f1 = 0.;
+    Real fx1max_f1 = 0.;
+    auto fname_fill1 = pin->GetOrAddString("resize_restart", "fname_fill1", "none");
+    if (!(fname_fill1 == "none")) {
+        std::unique_ptr<RestartReader> restartReader_f1;
+        restartReader_f1 = std::make_unique<RestartReader>(fname_fill1.c_str());
+
+        // Load input stream
+        std::unique_ptr<ParameterInput> fpinput_f1;
+        fpinput_f1 = std::make_unique<ParameterInput>();
+        auto inputString_f1 = restartReader_f1->GetAttr<std::string>("Input", "File");
+        std::istringstream is_f1(inputString_f1);
+        fpinput_f1->LoadFromStream(is_f1);
+
+        fx1min_f1 = fpinput_f1->GetReal("parthenon/mesh", "x1min");
+        fx1max_f1 = fpinput_f1->GetReal("parthenon/mesh", "x1max");
+        
+        restartReader_f1 = nullptr;
+    }
+    pin->SetReal("parthenon/mesh", "restart_x1min_f1", fx1min_f1);
+    pin->SetReal("parthenon/mesh", "restart_x1max_f1", fx1max_f1);
 }
 
 TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
@@ -149,11 +172,14 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
     const int n1mb = pin->GetInteger("parthenon/meshblock", "restart_nx1");
     const int n2mb = pin->GetInteger("parthenon/meshblock", "restart_nx2");
     const int n3mb = pin->GetInteger("parthenon/meshblock", "restart_nx3");
-    auto fname = pin->GetString("resize_restart", "fname"); // Require this, don't guess
-    auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill", "none");
+    auto fname = pin->GetString("resize_restart", "fname"); // Require this, don't guess. 1st priority
+    auto fname_fill1 = pin->GetOrAddString("resize_restart", "fname_fill1", "none"); // 2nd
+    auto fname_fill2 = pin->GetOrAddString("resize_restart", "fname_fill2", "none"); // 3rd
     const bool is_spherical = pin->GetBoolean("coordinates", "spherical");
     const Real fx1min = pin->GetReal("parthenon/mesh", "restart_x1min");
     const Real fx1max = pin->GetReal("parthenon/mesh", "restart_x1max");
+    const Real fx1min_f1 = pin->GetReal("parthenon/mesh", "restart_x1min_f1");
+    const Real fx1max_f1 = pin->GetReal("parthenon/mesh", "restart_x1max_f1");
     const Real mdot = pin->GetOrAddReal("bondi", "mdot", 1.0);
     const Real rs = pin->GetOrAddReal("bondi", "rs", 8.0);
     const Real x1min = pin->GetReal("parthenon/mesh", "x1min");
@@ -179,14 +205,20 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
         pmb->packages.Get("GRMHD")->AddParam<int>("rmbnx3", n3mb);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("fname")))
         pmb->packages.Get("GRMHD")->AddParam<std::string>("fname", fname);
-    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("fname_fill")))
-        pmb->packages.Get("GRMHD")->AddParam<std::string>("fname_fill", fname_fill);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("fname_fill1")))
+        pmb->packages.Get("GRMHD")->AddParam<std::string>("fname_fill1", fname_fill1);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("fname_fill2")))
+        pmb->packages.Get("GRMHD")->AddParam<std::string>("fname_fill2", fname_fill2);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("spherical")))
         pmb->packages.Get("GRMHD")->AddParam<bool>("spherical", is_spherical);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1min")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("rx1min", fx1min);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1max")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("rx1max", fx1max);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1min_f1")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("rx1min_f1", fx1min_f1);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1max_f1")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("rx1max_f1", fx1max_f1);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("mdot")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("mdot", mdot);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rs")))
@@ -251,14 +283,19 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     hsize_t n3mb = pmb->packages.Get("GRMHD")->Param<int>("rmbnx3");
     hsize_t nBlocks = (int) (n1tot*n2tot*n3tot)/(n1mb*n2mb*n3mb);
     auto fname = pmb->packages.Get("GRMHD")->Param<std::string>("fname");
-    auto fname_fill = pmb->packages.Get("GRMHD")->Param<std::string>("fname_fill");
-    const bool should_fill = !(fname_fill == "none");
+    auto fname_fill1 = pmb->packages.Get("GRMHD")->Param<std::string>("fname_fill1");
+    auto fname_fill2 = pmb->packages.Get("GRMHD")->Param<std::string>("fname_fill2");
+    const bool should_fill1 = !(fname_fill1 == "none");
+    const bool should_fill2 = !(fname_fill2 == "none");
     const Real fx1min = pmb->packages.Get("GRMHD")->Param<Real>("rx1min");
     const Real fx1max = pmb->packages.Get("GRMHD")->Param<Real>("rx1max");
+    const Real fx1min_f1 = pmb->packages.Get("GRMHD")->Param<Real>("rx1min_f1");
+    const Real fx1max_f1 = pmb->packages.Get("GRMHD")->Param<Real>("rx1max_f1");
     const Real dx1 = (fx1max - fx1min) / n1tot;
     const bool fghostzones = pmb->packages.Get("GRMHD")->Param<bool>("rghostzones");
     int fnghost = pmb->packages.Get("GRMHD")->Param<int>("rnghost");
     const Real fx1min_ghost = fx1min - fnghost*dx1;
+    const Real fx1max_ghost = fx1max + fnghost*dx1;
     PackIndexMap prims_map, cons_map;
     auto P = GRMHD::PackMHDPrims(rc, prims_map);
     auto U = GRMHD::PackMHDCons(rc, cons_map);
@@ -325,52 +362,87 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         hdf5_read_array(x3_file, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
         hdf5_close();
         
-        GridScalar x1_fill_device("x1_fill_device", length[0], length[1]); 
-        GridScalar x2_fill_device("x2_fill_device", length[0], length[2]); 
-        GridScalar x3_fill_device("x2_fill_device", length[0], length[3]); 
-        GridScalar rho_fill_device("rho_fill_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill_device("u_fill_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill_device("uvec_fill_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill_device("B_fill_device", NVEC, length[0], length[3], length[2], length[1]); 
-        auto x1_fill_host = x1_fill_device.GetHostMirror();
-        auto x2_fill_host = x2_fill_device.GetHostMirror();
-        auto x3_fill_host = x3_fill_device.GetHostMirror();
-        auto rho_fill_host = rho_fill_device.GetHostMirror();
-        auto u_fill_host = u_fill_device.GetHostMirror();
-        auto uvec_fill_host = uvec_fill_device.GetHostMirror();
-        auto B_fill_host = B_fill_device.GetHostMirror();
-        Real *rho_filefill = new double[block_sz];
-        Real *u_filefill = new double[block_sz];
-        Real *uvec_filefill = new double[block_sz*3];
-        Real *B_filefill = new double[block_sz*3];
-        Real *x1_filefill = new double[length[0]*length[1]];
-        Real *x2_filefill = new double[length[0]*length[2]];
-        Real *x3_filefill = new double[length[0]*length[3]];
-        if (fname_fill != "none") { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
-            hdf5_open(fname_fill.c_str());
+        GridScalar x1_fill1_device("x1_fill1_device", length[0], length[1]); 
+        GridScalar x2_fill1_device("x2_fill1_device", length[0], length[2]); 
+        GridScalar x3_fill1_device("x2_fill1_device", length[0], length[3]); 
+        GridScalar rho_fill1_device("rho_fill1_device", length[0], length[3], length[2], length[1]); 
+        GridScalar u_fill1_device("u_fill1_device", length[0], length[3], length[2], length[1]); 
+        GridVector uvec_fill1_device("uvec_fill1_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridVector B_fill1_device("B_fill1_device", NVEC, length[0], length[3], length[2], length[1]); 
+        auto x1_fill1_host = x1_fill1_device.GetHostMirror();
+        auto x2_fill1_host = x2_fill1_device.GetHostMirror();
+        auto x3_fill1_host = x3_fill1_device.GetHostMirror();
+        auto rho_fill1_host = rho_fill1_device.GetHostMirror();
+        auto u_fill1_host = u_fill1_device.GetHostMirror();
+        auto uvec_fill1_host = uvec_fill1_device.GetHostMirror();
+        auto B_fill1_host = B_fill1_device.GetHostMirror();
+        Real *rho_filefill1 = new double[block_sz];
+        Real *u_filefill1 = new double[block_sz];
+        Real *uvec_filefill1 = new double[block_sz*3];
+        Real *B_filefill1 = new double[block_sz*3];
+        Real *x1_filefill1 = new double[length[0]*length[1]];
+        Real *x2_filefill1 = new double[length[0]*length[2]];
+        Real *x3_filefill1 = new double[length[0]*length[3]];
+        if (should_fill1) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
+            hdf5_open(fname_fill1.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            //if (include_B) hdf5_read_array(B_filefill, "prims.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill1, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill1, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill1, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill1, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill1, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill1, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill1, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
+        GridScalar x1_fill2_device("x1_fill2_device", length[0], length[1]); 
+        GridScalar x2_fill2_device("x2_fill2_device", length[0], length[2]); 
+        GridScalar x3_fill2_device("x2_fill2_device", length[0], length[3]); 
+        GridScalar rho_fill2_device("rho_fill2_device", length[0], length[3], length[2], length[1]); 
+        GridScalar u_fill2_device("u_fill2_device", length[0], length[3], length[2], length[1]); 
+        GridVector uvec_fill2_device("uvec_fill2_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridVector B_fill2_device("B_fill2_device", NVEC, length[0], length[3], length[2], length[1]); 
+        auto x1_fill2_host = x1_fill2_device.GetHostMirror();
+        auto x2_fill2_host = x2_fill2_device.GetHostMirror();
+        auto x3_fill2_host = x3_fill2_device.GetHostMirror();
+        auto rho_fill2_host = rho_fill2_device.GetHostMirror();
+        auto u_fill2_host = u_fill2_device.GetHostMirror();
+        auto uvec_fill2_host = uvec_fill2_device.GetHostMirror();
+        auto B_fill2_host = B_fill2_device.GetHostMirror();
+        Real *rho_filefill2 = new double[block_sz];
+        Real *u_filefill2 = new double[block_sz];
+        Real *uvec_filefill2 = new double[block_sz*3];
+        Real *B_filefill2 = new double[block_sz*3];
+        Real *x1_filefill2 = new double[length[0]*length[1]];
+        Real *x2_filefill2 = new double[length[0]*length[2]];
+        Real *x3_filefill2 = new double[length[0]*length[3]];
+        if (should_fill2) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
+            hdf5_open(fname_fill2.c_str());
+            hdf5_set_directory("/");
+            hdf5_read_array(rho_filefill2, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill2, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill2, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill2, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill2, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill2, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill2, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_close();
+        }
         // save the grid coordinate values to host array
         for (int iblocktemp = 0; iblocktemp < length[0]; iblocktemp++) {
             for (int itemp = 0; itemp < length[1]; itemp++) {
                 x1_f_host(iblocktemp,itemp) = x1_file[length[1]*iblocktemp+itemp];
-                if (fname_fill != "none") x1_fill_host(iblocktemp,itemp) = x1_filefill[length[1]*iblocktemp+itemp];
+                if (should_fill1) x1_fill1_host(iblocktemp,itemp) = x1_filefill1[length[1]*iblocktemp+itemp];
+                if (should_fill2) x1_fill2_host(iblocktemp,itemp) = x1_filefill2[length[1]*iblocktemp+itemp];
             } for (int jtemp = 0; jtemp < length[2]; jtemp++) {
                 x2_f_host(iblocktemp,jtemp) = x2_file[length[2]*iblocktemp+jtemp];
-                if (fname_fill != "none") x2_fill_host(iblocktemp,jtemp) = x2_filefill[length[2]*iblocktemp+jtemp];
+                if (should_fill1) x2_fill1_host(iblocktemp,jtemp) = x2_filefill1[length[2]*iblocktemp+jtemp];
+                if (should_fill2) x2_fill2_host(iblocktemp,jtemp) = x2_filefill2[length[2]*iblocktemp+jtemp];
             } for (int ktemp = 0; ktemp < length[3]; ktemp++) {
                 x3_f_host(iblocktemp,ktemp) = x3_file[length[3]*iblocktemp+ktemp];
-                if (fname_fill != "none") x3_fill_host(iblocktemp,ktemp) = x3_filefill[length[3]*iblocktemp+ktemp];
+                if (should_fill1) x3_fill1_host(iblocktemp,ktemp) = x3_filefill1[length[3]*iblocktemp+ktemp];
+                if (should_fill2) x3_fill2_host(iblocktemp,ktemp) = x3_filefill2[length[3]*iblocktemp+ktemp];
             }
         }
         // re-arrange uvec such that it can be read in the VLOOP
@@ -383,9 +455,13 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
 
                         rho_f_host(iblocktemp,ktemp,jtemp,itemp) = rho_file[scalar_file_index];
                         u_f_host(iblocktemp,ktemp,jtemp,itemp) = u_file[scalar_file_index];
-                        if (fname_fill != "none") {
-                            rho_fill_host(iblocktemp,ktemp,jtemp,itemp) = rho_filefill[scalar_file_index];
-                            u_fill_host(iblocktemp,ktemp,jtemp,itemp) = u_filefill[scalar_file_index];
+                        if (should_fill1) {
+                            rho_fill1_host(iblocktemp,ktemp,jtemp,itemp) = rho_filefill1[scalar_file_index];
+                            u_fill1_host(iblocktemp,ktemp,jtemp,itemp) = u_filefill1[scalar_file_index];
+                        }
+                        if (should_fill2) {
+                            rho_fill2_host(iblocktemp,ktemp,jtemp,itemp) = rho_filefill2[scalar_file_index];
+                            u_fill2_host(iblocktemp,ktemp,jtemp,itemp) = u_filefill2[scalar_file_index];
                         }
                         for (int ltemp = 0; ltemp < 3; ltemp++) {
                             //vector_file_index = 3*(scalar_file_index)+ltemp; // outdated parthenon phdf5 saving order
@@ -393,9 +469,13 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                             
                             uvec_f_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_file[vector_file_index];
                             if (include_B) B_f_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_file[vector_file_index];
-                            if (fname_fill != "none") {
-                                uvec_fill_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_filefill[vector_file_index];
-                                if (include_B) B_fill_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_filefill[vector_file_index];
+                            if (should_fill1) {
+                                uvec_fill1_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_filefill1[vector_file_index];
+                                if (include_B) B_fill1_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_filefill1[vector_file_index];
+                            }
+                            if (should_fill2) {
+                                uvec_fill2_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_filefill2[vector_file_index];
+                                if (include_B) B_fill2_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_filefill2[vector_file_index];
                             }
                         }
                     }
@@ -422,14 +502,23 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         u_f_device.DeepCopy(u_f_host);
         uvec_f_device.DeepCopy(uvec_f_host);
         if (include_B) B_f_device.DeepCopy(B_f_host);
-        if (fname_fill != "none") {
-            x1_fill_device.DeepCopy(x1_fill_host);
-            x2_fill_device.DeepCopy(x2_fill_host);
-            x3_fill_device.DeepCopy(x3_fill_host);
-            rho_fill_device.DeepCopy(rho_fill_host);
-            u_fill_device.DeepCopy(u_fill_host);
-            uvec_fill_device.DeepCopy(uvec_fill_host);
-            if (include_B) B_fill_device.DeepCopy(B_fill_host);
+        if (should_fill1) {
+            x1_fill1_device.DeepCopy(x1_fill1_host);
+            x2_fill1_device.DeepCopy(x2_fill1_host);
+            x3_fill1_device.DeepCopy(x3_fill1_host);
+            rho_fill1_device.DeepCopy(rho_fill1_host);
+            u_fill1_device.DeepCopy(u_fill1_host);
+            uvec_fill1_device.DeepCopy(uvec_fill1_host);
+            if (include_B) B_fill1_device.DeepCopy(B_fill1_host);
+        }
+        if (should_fill2) {
+            x1_fill2_device.DeepCopy(x1_fill2_host);
+            x2_fill2_device.DeepCopy(x2_fill2_host);
+            x3_fill2_device.DeepCopy(x3_fill2_host);
+            rho_fill2_device.DeepCopy(rho_fill2_host);
+            u_fill2_device.DeepCopy(u_fill2_host);
+            uvec_fill2_device.DeepCopy(uvec_fill2_host);
+            if (include_B) B_fill2_device.DeepCopy(B_fill2_host);
         }
         //if (pin->GetOrAddString("b_field", "type", "none") != "none") {
         //    B_P.DeepCopy(B_host);
@@ -440,9 +529,10 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         pmb->par_for("copy_restart_state_kharma", ks, ke, js, je, is, ie,
             KOKKOS_LAMBDA_3D {
                 get_prim_restart_kharma(G, coords, P, m_p, blcoord,  kscoord, 
-                    fx1min, fx1max, fnghost, should_fill, is_spherical, gam, rs, mdot, uphi, length,
+                    fx1min_ghost, fx1max_ghost, fx1min_f1, fx1max_f1, fnghost, should_fill1, should_fill2, is_spherical, gam, rs, mdot, uphi, length,
                     x1_f_device, x2_f_device, x3_f_device, rho_f_device, u_f_device, uvec_f_device,
-                    x1_fill_device, x2_fill_device, x3_fill_device, rho_fill_device, u_fill_device, uvec_fill_device,
+                    x1_fill1_device, x2_fill1_device, x3_fill1_device, rho_fill1_device, u_fill1_device, uvec_fill1_device,
+                    x1_fill2_device, x2_fill2_device, x3_fill2_device, rho_fill2_device, u_fill2_device, uvec_fill2_device,
                     vacuum_logrho, vacuum_log_u_over_rho,
                     k, j, i);
                 //GRMHD::p_to_u(G,P,m_p,gam,k,j,i,U,m_u);  //TODO: is this needed? I don't see it in resize_restart.cpp
@@ -451,9 +541,10 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                 //}
                 if (include_B)
                     get_B_restart_kharma(G, coords, P, m_p, blcoord,  kscoord, 
-                        fx1min, fx1max, should_fill, length,
+                        fx1min_ghost, fx1max_ghost, fx1min_f1, fx1max_f1, should_fill1, should_fill2, length,
                         x1_f_device, x2_f_device, x3_f_device, B_f_device,
-                        x1_fill_device, x2_fill_device, x3_fill_device, B_fill_device, B_Save,
+                        x1_fill1_device, x2_fill1_device, x3_fill1_device, B_fill1_device,
+                        x1_fill2_device, x2_fill2_device, x3_fill2_device, B_fill2_device, B_Save,
                         k, j, i);
             }
         );

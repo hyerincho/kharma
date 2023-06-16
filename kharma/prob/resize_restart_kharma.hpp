@@ -113,10 +113,11 @@ KOKKOS_INLINE_FUNCTION void convert_to_utwiddle(const GRCoordinates& G, const Co
 
 KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P, const VarMap& m_p,
                     const SphBLCoords& bl,  const SphKSCoords& ks, 
-                    const Real fx1min, const Real fx1max, const Real fnghost, const bool should_fill, const bool is_spherical,
+                    const Real fx1min, const Real fx1max, const Real fx1min_f1, const Real fx1max_f1, const Real fnghost, const bool should_fill1, const bool should_fill2, const bool is_spherical,
                     const Real gam, const Real rs,  const Real mdot, const Real uphi, const hsize_t length[GR_DIM],
                     const GridScalar& x1, const GridScalar& x2, const GridScalar& x3, const GridScalar& rho, const GridScalar& u, const GridVector& uvec,
-                    const GridScalar& x1_fill, const GridScalar& x2_fill, const GridScalar& x3_fill, const GridScalar& rho_fill, const GridScalar& u_fill, const GridVector& uvec_fill,
+                    const GridScalar& x1_fill1, const GridScalar& x2_fill1, const GridScalar& x3_fill1, const GridScalar& rho_fill1, const GridScalar& u_fill1, const GridVector& uvec_fill1,
+                    const GridScalar& x1_fill2, const GridScalar& x2_fill2, const GridScalar& x3_fill2, const GridScalar& rho_fill2, const GridScalar& u_fill2, const GridVector& uvec_fill2,
                     const Real vacuum_logrho, const Real vacuum_log_u_over_rho,
                     const int& k, const int& j, const int& i) 
 {
@@ -128,55 +129,26 @@ KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, cons
     GReal del[GR_DIM]; // not really needed now since I am doing nearest neighbor interpolation
     int iblocktemp, itemp, jtemp, ktemp;
     // Interpolate the value at this location from the global grid
-    if ((!should_fill) && (X[1]<fx1min)) {// if cannot be read from restart file
-        Real n = 1. / (gam - 1.);
-        Real uc = m::sqrt(mdot / (2. * rs));
-        Real Vc = -m::sqrt(m::pow(uc, 2) / (1. - 3. * m::pow(uc, 2)));
-        Real Tc = -n * m::pow(Vc, 2) / ((n + 1.) * (n * m::pow(Vc, 2) - 1.));
-        Real C1 = uc * m::pow(rs, 2) * m::pow(Tc, n);
-        Real C2 = m::pow(1. + (1. + n) * Tc, 2) * (1. - 2. * mdot / rs + m::pow(C1, 2) / (m::pow(rs, 4) * m::pow(Tc, 2 * n)));
-
-        GReal Xembed[GR_DIM];
-        G.coord_embed(k, j, i, Loci::center, Xembed);
-        GReal r = Xembed[1];
-  
-        // copy over smallest radius states
-        //Xtoindex(X, x1, x2, x3, length, iblocktemp, itemp, jtemp, ktemp, del);
-        iblocktemp=0; // assuming always this block contains smallest radii?
-        itemp = fnghost; // in order to copy over the physical region, not the ghost region
-        // (02/08/23) instead in order to set the vacuum homogeneous instead of having theta phi dependence, set j and k values
-        jtemp = fnghost;
-        ktemp = fnghost * (length[3] > 1);
-        if (vacuum_logrho !=0 && vacuum_log_u_over_rho !=0) {
-            rho_temp = m::pow(10.,vacuum_logrho);
-            u_temp = m::pow(10.,vacuum_log_u_over_rho) * rho_temp;
-        } else {
-            rho_temp = rho(iblocktemp,ktemp,jtemp,itemp);
-            u_temp = u(iblocktemp,ktemp,jtemp,itemp);
-        }
-        Real T = get_T(r, C1, C2, n, rs);
-
-        Real ur = -C1 / (m::pow(T, n) * m::pow(r, 2));
-        Real ucon_bl[GR_DIM] = {0, ur, 0, 0};
-        ucon_bl[3]=uphi*m::pow(r,-3./2.); // (04/13/23) a fraction of the kepler 
-        convert_to_utwiddle(G,coords,bl,ks,k,j,i,ucon_bl,u_prim);
-        
-   }
-    // HyerinTODO: if fname_fill exists and smaller.
-    else if ((should_fill) && ((X[1]>fx1max)||(X[1]<fx1min))) { // fill with the fname_fill
-        //Xtoindex(X, &(x1_fill[0]), &(x2_fill[0]), &(x3_fill[0]), length, iblocktemp, itemp, jtemp, ktemp, del);
-        Xtoindex(X, x1_fill, x2_fill, x3_fill, length, iblocktemp, itemp, jtemp, ktemp, del);
-        rho_temp = rho_fill(iblocktemp,ktemp,jtemp,itemp);
-        u_temp = u_fill(iblocktemp,ktemp,jtemp,itemp);
-        VLOOP u_prim[v] = uvec_fill(v,iblocktemp,ktemp,jtemp,itemp);
-        //if (include_B) VLOOP B_prim[v] = B_fill(v,iblocktemp,ktemp,jtemp,itemp);
-    }
-    else { 
+    if ((X[1]>=fx1min) && (X[1]<=fx1max)) { // fill with the fname
         Xtoindex(X, x1, x2, x3, length, iblocktemp, itemp, jtemp, ktemp, del);
         rho_temp = rho(iblocktemp,ktemp,jtemp,itemp);
         u_temp = u(iblocktemp,ktemp,jtemp,itemp);
         VLOOP u_prim[v] = uvec(v,iblocktemp,ktemp,jtemp,itemp);
-        //if (include_B) VLOOP B_prim[v] = B(v,iblocktemp,ktemp,jtemp,itemp);
+    }
+    else if ((should_fill1) && (X[1]>=fx1min_f1) && (X[1]<=fx1max_f1)) { // fill with the fname_fill1
+        Xtoindex(X, x1_fill1, x2_fill1, x3_fill1, length, iblocktemp, itemp, jtemp, ktemp, del);
+        rho_temp = rho_fill1(iblocktemp,ktemp,jtemp,itemp);
+        u_temp = u_fill1(iblocktemp,ktemp,jtemp,itemp);
+        VLOOP u_prim[v] = uvec_fill1(v,iblocktemp,ktemp,jtemp,itemp);
+    }
+    else if (should_fill2) {
+        Xtoindex(X, x1_fill2, x2_fill2, x3_fill2, length, iblocktemp, itemp, jtemp, ktemp, del);
+        rho_temp = rho_fill2(iblocktemp,ktemp,jtemp,itemp);
+        u_temp = u_fill2(iblocktemp,ktemp,jtemp,itemp);
+        VLOOP u_prim[v] = uvec_fill2(v,iblocktemp,ktemp,jtemp,itemp);
+    }
+    else {
+        printf("HYERIN: no corresponding file found to fill!\n");
     }
     P(m_p.RHO, k, j, i) = rho_temp;
     P(m_p.UU, k, j, i) = u_temp;
@@ -188,10 +160,11 @@ KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, cons
 
 KOKKOS_INLINE_FUNCTION void get_B_restart_kharma(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P, const VarMap& m_p,
                     const SphBLCoords& bl,  const SphKSCoords& ks, 
-                    const Real fx1min, const Real fx1max, const bool should_fill,
+                    const Real fx1min, const Real fx1max, const Real fx1min_f1, const Real fx1max_f1, const bool should_fill1, const bool should_fill2,
                     const hsize_t length[GR_DIM],
                     const GridScalar& x1, const GridScalar& x2, const GridScalar& x3, const GridVector& B,
-                    const GridScalar& x1_fill, const GridScalar& x2_fill, const GridScalar& x3_fill, const GridVector& B_fill, const GridVector& B_save,
+                    const GridScalar& x1_fill1, const GridScalar& x2_fill1, const GridScalar& x3_fill1, const GridVector& B_fill1,
+                    const GridScalar& x1_fill2, const GridScalar& x2_fill2, const GridScalar& x3_fill2, const GridVector& B_fill2, const GridVector& B_save,
                     const int& k, const int& j, const int& i) 
 {
     //Real B_prim[NVEC];
@@ -202,19 +175,20 @@ KOKKOS_INLINE_FUNCTION void get_B_restart_kharma(const GRCoordinates& G, const C
     GReal del[GR_DIM]; // not really needed now since I am doing nearest neighbor interpolation
     int iblocktemp, itemp, jtemp, ktemp;
     // Interpolate the value at this location from the global grid
-    if ((!should_fill) && (X[1]<fx1min)) {// if cannot be read from restart file
-        // do nothing. just use the initialization from SeedBField
-        //VLOOP B_prim[v] = P(m_p.B1 + v, k, j, i);
-   }
-    else if ((should_fill) && ((X[1]>fx1max)||(X[1]<fx1min))) { // fill with the fname_fill
-        Xtoindex(X, x1_fill, x2_fill, x3_fill, length, iblocktemp, itemp, jtemp, ktemp, del);
-        //VLOOP B_prim[v] = B_fill(v,iblocktemp,ktemp,jtemp,itemp);
-        VLOOP B_cons[v] = B_fill(v,iblocktemp,ktemp,jtemp,itemp);
-    }
-    else { 
+    if ((X[1]>=fx1min) && (X[1]<=fx1max)) { // fill with the fname
         Xtoindex(X, x1, x2, x3, length, iblocktemp, itemp, jtemp, ktemp, del);
-        //VLOOP B_prim[v] = B(v,iblocktemp,ktemp,jtemp,itemp);
         VLOOP B_cons[v] = B(v,iblocktemp,ktemp,jtemp,itemp);
+    }
+    else if ((should_fill1) && (X[1]>=fx1min_f1) && (X[1]<=fx1max_f1)) { // fill with the fname_fill1
+        Xtoindex(X, x1_fill1, x2_fill1, x3_fill1, length, iblocktemp, itemp, jtemp, ktemp, del);
+        VLOOP B_cons[v] = B_fill1(v,iblocktemp,ktemp,jtemp,itemp);
+    }
+    else if (should_fill2) {
+        Xtoindex(X, x1_fill2, x2_fill2, x3_fill2, length, iblocktemp, itemp, jtemp, ktemp, del);
+        VLOOP B_cons[v] = B_fill2(v,iblocktemp,ktemp,jtemp,itemp);
+    }
+    else {
+        printf("HYERIN: no corresponding file found to fill!\n");
     }
 
     B_save(0, k, j, i) = B_cons[0];
