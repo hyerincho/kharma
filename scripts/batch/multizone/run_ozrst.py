@@ -103,7 +103,7 @@ def run_multizone(**kwargs):
         args['resize_restart/nzone'] = kwargs['nzones']
         args['resize_restart/iteration'] = 1
         kwargs['start_run'] = 0
-        fn_dir = "../bondi_multizone_050123_bflux0_1e-4_96^3"
+        fn_dir = "../bondi_multizone_042723_bflux0_1e-4_64^3"
         fname_num = 298
         fname = glob.glob(fn_dir+"/bondi_multizone_{:05d}/*final.rhdf".format(fname_num))[0]
         fname_fill1 = glob.glob(fn_dir+"/bondi_multizone_{:05d}/*final.rhdf".format(fname_num-1))[0]
