@@ -174,6 +174,8 @@ def run_multizone(**kwargs):
         kwargs['parfile'] = mz_dir+"/multizone.par"
 
     stop = False
+    if 'b_field/initial_cleanup' in args.keys():
+        if args['b_field/initial_cleanup']: min_num_cleanup = (kwargs["nzones"]-1)*2
     # Iterate, starting with the default args and updating as we go
     for run_num in np.arange(kwargs['start_run'], kwargs['nruns']):
         # run times for each annulus
@@ -242,6 +244,16 @@ def run_multizone(**kwargs):
         # Update parameters for the next pass
         # This updates both kwargs (start_time) and args (coordinates, dt, iteration #, fnames)
         update_args(run_num, kwargs, args)
+        if args['b_field/initial_cleanup']:
+            #d1 = pyharm.load_dump(fname)
+            #d2 = pyharm.load_dump(fname_fill)
+            #if d1["nx1"] == d2["nx1"]:
+            #    args['b_field/initial_cleanup'] = 0
+            #del d1, d2
+            if min_num_cleanup > 0:
+                min_num_cleanup -= 1
+            else:
+                args['b_field/initial_cleanup'] = 0
 
 
 def update_args(run_num, kwargs, args):
@@ -296,6 +308,7 @@ def update_args(run_num, kwargs, args):
         fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
     args['resize_restart/fname'] = fname
     args['resize_restart/fname_fill'] = fname_fill
+
 
 if __name__=="__main__":
   run_multizone()
