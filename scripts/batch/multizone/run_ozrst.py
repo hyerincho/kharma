@@ -103,14 +103,28 @@ def run_multizone(**kwargs):
         args['resize_restart/nzone'] = kwargs['nzones']
         args['resize_restart/iteration'] = 1
         kwargs['start_run'] = 0
-        fn_dir = "../bondi_multizone_042723_bflux0_1e-4_64^3"
-        fname_num = 298
-        fname = glob.glob(fn_dir+"/bondi_multizone_{:05d}/*final.rhdf".format(fname_num))[0]
-        fname_fill1 = glob.glob(fn_dir+"/bondi_multizone_{:05d}/*final.rhdf".format(fname_num-1))[0]
-        fname_fill2 = glob.glob(fn_dir+"/bondi_multizone_{:05d}/*final.rhdf".format(fname_num-2))[0]
+        fn_dir = "../071823_test_refine_rst"
+        fname_num = 7
+        fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
+        fname_fill1 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
+        fname_fill2 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-2))[0]
+        fname_fill3 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-3))[0]
+        fname_fill4 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-4))[0]
+        fname_fill5 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-5))[0]
+        fname_fill6 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-6))[0]
+        fname_fill7 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-7))[0]
         args['resize_restart/fname'] = fname
         args['resize_restart/fname_fill1'] = fname_fill1
         args['resize_restart/fname_fill2'] = fname_fill2
+        args['resize_restart/fname_fill3'] = fname_fill3
+        args['resize_restart/fname_fill4'] = fname_fill4
+        args['resize_restart/fname_fill5'] = fname_fill5
+        args['resize_restart/fname_fill6'] = fname_fill6
+        args['resize_restart/fname_fill7'] = fname_fill7
+
+        args['b_field/type'] = "vertical"
+        args['b_field/initial_cleanup'] = 1
+        args['b_cleanup/rel_tolerance'] = 1.0e-8 #12
 
         turn_around = kwargs['nzones'] - 1
         args['coordinates/r_out'] = base**(turn_around+2)
@@ -169,7 +183,7 @@ def run_multizone(**kwargs):
         args['gizmo_shell/datfn'] = kwargs['gizmo_fname']
         args['parthenon/time/nlim'] = kwargs['nlim']
         # Mesh size
-        args['parthenon/mesh/nx1'] = kwargs['nx1']*(kwargs['nzones']+1)//2
+        args['parthenon/mesh/nx1'] = int((kwargs['nx1']/2.)*(kwargs['nzones']+1))#(kwargs['nzones']+1)//2
         args['parthenon/mesh/nx2'] = kwargs['nx2']
         args['parthenon/mesh/nx3'] = kwargs['nx3']
         args['parthenon/meshblock/nx1'] = args['parthenon/mesh/nx1'] #kwargs['nx1_mb']
