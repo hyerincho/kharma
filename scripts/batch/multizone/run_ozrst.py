@@ -211,7 +211,7 @@ def run_multizone(**kwargs):
                 runtime = calc_runtime(r_out, r_b)
             # B field runs use half this
             if kwargs['bz'] != 0.0:
-                runtime /= 10 # 2
+                runtime /= np.power(base,3./2)*2
         else:
             runtime = float(kwargs['tlim'])
         args['parthenon/time/tlim'] = 1e8 #kwargs['start_time'] + runtime
