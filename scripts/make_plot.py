@@ -14,6 +14,7 @@ import pyharm.plots.plot_dumps as pd
 import pyharm.plots.plot_results as pr
 from pyharm.plots.figures import floors, plot_hst, e_ratio, prims
 from pyharm.plots.frame import frame
+from pyharm.plots.overlays import *
 from pyharm.ana_results import AnaResults
 from pyharm import io
 
@@ -440,29 +441,38 @@ def plots_together(dirtag):
     #plt.tight_layout()
     plt.savefig(plt_path+"/multizone_plots.png", bbox_inches='tight', pad_inches = 0)
 
-def plot_diffs(fname1,fname2,var):
+def plot_diffs(fname1,fname2,var='b'):
     dump1=pyharm.load_dump(fname1)
     dump2=pyharm.load_dump(fname2)
     tdump1 = int(io.get_dump_time(fname1))
     tdump2 = int(io.get_dump_time(fname2))
     fig,ax=plt.subplots(1,2,figsize=(16,8))
     sz=dump1["r_out"]
-    log_r=True
+    log_r=False #True
+    native=True #False #
     log=True #False #
     rel=True #False #
+    if native: window = None
+    else: window = [-sz,sz,-sz,sz]
     if log_r:
       sz=np.log10(sz)
     if log:
-      vmax=1e-3#-5 0
-      vmin=1e-10 #-12 -7
+      vmax=1e2#1e-1#-5 0
+      vmin=1e-4 #1e-10 #-12 -7
       #vmax=None
       #vmin=None
     else:
       vmax=1e-3 #1
       vmin=-1e-3 #-1
-    kwargs={**{'window':[-sz,sz,-sz,sz]}, **{'vmin':vmin}, **{'vmax':vmax}, **{'log_r':log_r}, **{'log':log}} # vmin -7 vmax 0
+    kwargs={**{'window':window}, **{'vmin':vmin}, **{'vmax':vmax}, **{'log_r':log_r}, **{'log':log}, **{'native':native}, **{'shading':'flat'}} # vmin -7 vmax 0
     pd.plot_diff_xz(ax[0], dump1, dump2, var,rel=rel,**kwargs)
-    pd.plot_diff_xy(ax[1], dump1, dump2, var,rel=rel,**kwargs)
+    #pd.plot_diff_xy(ax[1], dump1, dump2, var,rel=rel,**kwargs)
+    kwargs["vmin"]=1e-8
+    pd.plot_xz(ax[1], dump1, var,**kwargs)
+    if native: 
+        overlay_streamlines_xz(ax[0], dump1, 'B1', 'B2', color='c')
+        overlay_streamlines_xz(ax[1], dump2, 'B1', 'B2', color='c')
+    else: overlay_field(ax[1],dump2,nlines=40)
     title="diff: \n  "+ fname1+" \n"+fname2
     savefig_name="./plots/diff.png"
     if tdump1 == tdump2:
