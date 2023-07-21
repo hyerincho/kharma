@@ -441,7 +441,7 @@ def plots_together(dirtag):
     #plt.tight_layout()
     plt.savefig(plt_path+"/multizone_plots.png", bbox_inches='tight', pad_inches = 0)
 
-def plot_diffs(fname1,fname2,var='b'):
+def plot_diffs(fname1,fname2,var='b',xz=True):
     dump1=pyharm.load_dump(fname1)
     dump2=pyharm.load_dump(fname2)
     tdump1 = int(io.get_dump_time(fname1))
@@ -465,13 +465,24 @@ def plot_diffs(fname1,fname2,var='b'):
       vmax=1e-3 #1
       vmin=-1e-3 #-1
     kwargs={**{'window':window}, **{'vmin':vmin}, **{'vmax':vmax}, **{'log_r':log_r}, **{'log':log}, **{'native':native}, **{'shading':'flat'}} # vmin -7 vmax 0
-    pd.plot_diff_xz(ax[0], dump1, dump2, var,rel=rel,**kwargs)
-    #pd.plot_diff_xy(ax[1], dump1, dump2, var,rel=rel,**kwargs)
+    if xz:
+        pd.plot_diff_xz(ax[0], dump1, dump2, var,rel=rel,**kwargs)
+    else:
+        pd.plot_diff_xy(ax[0], dump1, dump2, var,rel=rel,**kwargs)
     kwargs["vmin"]=1e-8
-    pd.plot_xz(ax[1], dump1, var,**kwargs)
-    if native: 
-        overlay_streamlines_xz(ax[0], dump1, 'B1', 'B2', color='c')
-        overlay_streamlines_xz(ax[1], dump2, 'B1', 'B2', color='c')
+    if xz:
+        kwargs['vmin']=1e-6
+        kwargs['vmax']=1e9
+        pd.plot_xz(ax[1], dump2, 'abs_divB' ,**kwargs)
+    else:
+        pd.plot_xy(ax[1], dump1, var,**kwargs)
+    if native:
+        if xz:
+            overlay_streamlines_xz(ax[0], dump1, 'B1', 'B2', color='c')
+            overlay_streamlines_xz(ax[1], dump2, 'B1', 'B2', color='c')
+        else:
+            overlay_streamlines_xy(ax[0], dump1, 'B1', 'B3', color='c')
+            overlay_streamlines_xy(ax[1], dump2, 'B1', 'B3', color='c')
     else: overlay_field(ax[1],dump2,nlines=40)
     title="diff: \n  "+ fname1+" \n"+fname2
     savefig_name="./plots/diff.png"
@@ -818,10 +829,13 @@ def _main():
   #dirtag="062623_0.04tff/"
   #dirtag="062723_b3_0.2tff/"
   #dirtag="062723_0.01tff_8_6/"
-  dirtag="071023_beta01/"
+  #dirtag="071023_beta01/"
   #dirtag="071123_b3n16_beta01/"
   #dirtag="071423_beta03/"
   #dirtag="071723_diffbinit/"
+  #dirtag="072023_test_to_rst_frm/"
+  #dirtag="072023_test_rst_clean/"
+  dirtag="072123_rst_clean_frm_32/"
 
 
   #ozdir="bondi_multizone_050423_onezone_bflux0_1e-8_2d_n4/"
@@ -831,9 +845,12 @@ def _main():
   #same_time_comparison(ozdir,mzdir)
 
   quantities=["rho","u","T","b","beta","abs_u^r","abs_u^phi","abs_u^th","K","u^r","u^phi"] #,"abs_U1"] #
-  plot_quantities(quantities,ONEZONE,NZONE,STARTZONE,dirtag=dirtag,show_until=None)
+  #plot_quantities(quantities,ONEZONE,NZONE,STARTZONE,dirtag=dirtag,show_until=None)
   #plot_mdot_r(ONEZONE,NZONE,STARTZONE,dirtag=dirtag,avg=False)
   #plot_mdot_phib_t(NZONE,STARTZONE,dirtag,r_list=[2,25,200,1500,12000])
+  fname1="../data/"+dirtag+"/00001/resize_restart_kharma.out1.now.rhdf"
+  fname2="../data/"+dirtag+"/00001/resize_restart_kharma.out1.00000.rhdf"
+  plot_diffs(fname1,fname2,"b",xz=True)
   #calc_tot_time(dirtag)
   #plot_figures_one_run(dirtag,35,floors) # e_ratio, prims
 
@@ -844,14 +861,9 @@ def _main():
   #plot_grid_3d(dirtag)
 
   '''
-  #fname1="../data/"+dirtag+"/bondi_multizone_00001/resize_restart_kharma.out1.00000.rhdf"
-  fname1="../data/"+dirtag+"/bondi_multizone_00000/bondi.out1.final.rhdf"
-  #fname2="../data/"+dirtag+"/bondi_multizone_00002/resize_restart_kharma.out1.now.rhdf"
-  fname2="../data/bondi_multizone_033023_bflux_1e-3_lin/bondi_multizone_00000/bondi.out1.final.rhdf"
   #for i in range(6):
   #  fname1="../data/"+dirtag+"/bondi_multizone_00000/bondi.out1.{:05d}.rhdf".format(i)
   #  fname2="../data/bondi_multizone_040123_onezone_1e-3_lin/bondi_multizone_00000/bondi.out1.{:05d}.rhdf".format(i)
-  plot_diffs(fname1,fname2,"b")
 
   #dirtag="bondi_multizone_022723_jit0.3_new_coord/"
   dump=pyharm.load_dump("../data/"+dirtag+"/bondi_multizone_00001/resize_restart_kharma.out1.00000.rhdf")
