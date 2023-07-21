@@ -103,8 +103,8 @@ def run_multizone(**kwargs):
         args['resize_restart/nzone'] = kwargs['nzones']
         args['resize_restart/iteration'] = 1
         kwargs['start_run'] = 0
-        fn_dir = "../071823_test_refine_rst"
-        fname_num = 7
+        fn_dir = "../071023_beta01" #"../072023_test_to_rst_frm" #
+        fname_num = 47341 #7 #
         fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
         fname_fill1 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
         fname_fill2 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-2))[0]
@@ -124,7 +124,7 @@ def run_multizone(**kwargs):
 
         args['b_field/type'] = "vertical"
         args['b_field/initial_cleanup'] = 1
-        args['b_cleanup/rel_tolerance'] = 1.0e-8 #12
+        args['b_cleanup/rel_tolerance'] = 1.0e-3 #8 #12
 
         turn_around = kwargs['nzones'] - 1
         args['coordinates/r_out'] = base**(turn_around+2)
@@ -293,18 +293,19 @@ def update_args(run_num, kwargs, args):
 
     # Choose timestep and radii for the next run: smaller/larger as we step in/out
     args['parthenon/time/dt'] = max(dt_last * kwargs['base']**(-3./2.*out_to_in) / 4, 1e-5)
-    if out_to_in > 0:
-        args['coordinates/r_out'] = last_r_out / kwargs['base']
-        args['coordinates/r_in'] = last_r_in / kwargs['base']
-    else:
-        args['coordinates/r_out'] = last_r_out * kwargs['base']
-        args['coordinates/r_in'] = last_r_in * kwargs['base']
 
     # Get filename to fill in the rest that fname doesn't cover
-    fname_fill_dir = data_dir(2 * (iteration - 1) * (kwargs['nzones'] - 1) - (run_num + 1))
-    fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
+    #fname_fill_dir = data_dir(2 * (iteration - 1) * (kwargs['nzones'] - 1) - (run_num + 1))
+    #fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
     args['resize_restart/fname'] = fname
-    args['resize_restart/fname_fill'] = fname_fill
+    # make all the fill files none
+    args['resize_restart/fname_fill1'] = "none"
+    args['resize_restart/fname_fill2'] = "none"
+    args['resize_restart/fname_fill3'] = "none"
+    args['resize_restart/fname_fill4'] = "none"
+    args['resize_restart/fname_fill5'] = "none"
+    args['resize_restart/fname_fill6'] = "none"
+    args['resize_restart/fname_fill7'] = "none"
 
 if __name__=="__main__":
   run_multizone()

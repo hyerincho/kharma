@@ -229,6 +229,10 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
     const Real fx1min_f6 = pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f6", -1);
     const Real fx1max_f6 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f6", -1);
     const Real x1min = pin->GetReal("parthenon/mesh", "x1min");
+    const Real x2min = pin->GetReal("parthenon/mesh", "x2min");
+    const Real x2max = pin->GetReal("parthenon/mesh", "x2max");
+    const Real x3min = pin->GetReal("parthenon/mesh", "x3min");
+    const Real x3max = pin->GetReal("parthenon/mesh", "x3max");
     const int nghost = pin->GetReal("parthenon/mesh", "restart_nghost");
     const bool ghost_zones = pin->GetBoolean("parthenon/mesh", "restart_ghostzones");
     auto fBfield = pin->GetOrAddString("b_field", "type", "none");
@@ -295,6 +299,14 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
         pmb->packages.Get("GRMHD")->AddParam<Real>("rx1max_f6", fx1max_f6);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x1min")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("x1min", x1min);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x2min")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("x2min", x2min);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x2max")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("x2max", x2max);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x3min")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("x3min", x3min);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x3max")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("x3max", x3max);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rnghost")))
         pmb->packages.Get("GRMHD")->AddParam<int>("rnghost", nghost);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rghostzones")))
@@ -381,11 +393,18 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     const Real fx1max_f5 = pmb->packages.Get("GRMHD")->Param<Real>("rx1max_f5");
     const Real fx1min_f6 = pmb->packages.Get("GRMHD")->Param<Real>("rx1min_f6");
     const Real fx1max_f6 = pmb->packages.Get("GRMHD")->Param<Real>("rx1max_f6");
-    const Real dx1 = (fx1max - fx1min) / n1tot;
+    //const Real dx1 = (fx1max - fx1min) / n1tot;
+    const Real x2min = pmb->packages.Get("GRMHD")->Param<Real>("x2min");
+    const Real x2max = pmb->packages.Get("GRMHD")->Param<Real>("x2max");
+    const Real x3min = pmb->packages.Get("GRMHD")->Param<Real>("x3min");
+    const Real x3max = pmb->packages.Get("GRMHD")->Param<Real>("x3max");
+    const GReal dx[GR_DIM] = {0., (fx1max - fx1min)/n1tot,
+                                  (x2max - x2min)/n2tot,
+                                  (x3max - x3min)/n3tot};
     const bool fghostzones = pmb->packages.Get("GRMHD")->Param<bool>("rghostzones");
     int fnghost = pmb->packages.Get("GRMHD")->Param<int>("rnghost");
-    const Real fx1min_ghost = fx1min - fnghost*dx1;
-    const Real fx1max_ghost = fx1max + fnghost*dx1;
+    const Real fx1min_ghost = fx1min - fnghost*dx[1];
+    const Real fx1max_ghost = fx1max + fnghost*dx[1];
     PackIndexMap prims_map, cons_map;
     auto P = GRMHD::PackMHDPrims(rc, prims_map);
     auto U = GRMHD::PackMHDCons(rc, cons_map);
@@ -884,45 +903,45 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                 GReal X[GR_DIM];
                 G.coord(k, j, i, Loci::center, X);
                 if ((X[1]>=fx1min_ghost) && (X[1]<=fx1max_ghost)) { // fill with the fname
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_f_device, x2_f_device, x3_f_device, rho_f_device, u_f_device, uvec_f_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_f_device, x2_f_device, x3_f_device, B_f_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_f_device, x2_f_device, x3_f_device, B_f_device, B_Save, k, j, i);
                 } else if ((should_fill1) && (X[1]>=fx1min_f1) && (X[1]<=fx1max_f1)) { // fill with the fname_fill1
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill1_device, x2_fill1_device, x3_fill1_device, rho_fill1_device, u_fill1_device, uvec_fill1_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill1_device, x2_fill1_device, x3_fill1_device, B_fill1_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill1_device, x2_fill1_device, x3_fill1_device, B_fill1_device, B_Save, k, j, i);
                 } else if ((should_fill2) && (X[1]>=fx1min_f2) && (X[1]<=fx1max_f2)) { // fill with the fname_fill2
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill2_device, x2_fill2_device, x3_fill2_device, rho_fill2_device, u_fill2_device, uvec_fill2_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill2_device, x2_fill2_device, x3_fill2_device, B_fill2_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill2_device, x2_fill2_device, x3_fill2_device, B_fill2_device, B_Save, k, j, i);
                 } else if ((should_fill3) && (X[1]>=fx1min_f3) && (X[1]<=fx1max_f3)) { // fill with the fname_fill3
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill3_device, x2_fill3_device, x3_fill3_device, rho_fill3_device, u_fill3_device, uvec_fill3_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill3_device, x2_fill3_device, x3_fill3_device, B_fill3_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill3_device, x2_fill3_device, x3_fill3_device, B_fill3_device, B_Save, k, j, i);
                 } else if ((should_fill4) && (X[1]>=fx1min_f4) && (X[1]<=fx1max_f4)) { // fill with the fname_fill4
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill4_device, x2_fill4_device, x3_fill4_device, rho_fill4_device, u_fill4_device, uvec_fill4_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill4_device, x2_fill4_device, x3_fill4_device, B_fill4_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill4_device, x2_fill4_device, x3_fill4_device, B_fill4_device, B_Save, k, j, i);
                 } else if ((should_fill5) && (X[1]>=fx1min_f5) && (X[1]<=fx1max_f5)) { // fill with the fname_fill5
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill5_device, x2_fill5_device, x3_fill5_device, rho_fill5_device, u_fill5_device, uvec_fill5_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill5_device, x2_fill5_device, x3_fill5_device, B_fill5_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill5_device, x2_fill5_device, x3_fill5_device, B_fill5_device, B_Save, k, j, i);
                 } else if ((should_fill6) && (X[1]>=fx1min_f6) && (X[1]<=fx1max_f6)) { // fill with the fname_fill6
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill6_device, x2_fill6_device, x3_fill6_device, rho_fill6_device, u_fill6_device, uvec_fill6_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill6_device, x2_fill6_device, x3_fill6_device, B_fill6_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill6_device, x2_fill6_device, x3_fill6_device, B_fill6_device, B_Save, k, j, i);
                 } else if (should_fill7) { // fill with the fname_fill7
-                    get_prim_restart_kharma(X, P, m_p, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
                         x1_fill7_device, x2_fill7_device, x3_fill7_device, rho_fill7_device, u_fill7_device, uvec_fill7_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, length, x1_fill7_device, x2_fill7_device, x3_fill7_device, B_fill7_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill7_device, x2_fill7_device, x3_fill7_device, B_fill7_device, B_Save, k, j, i);
                 } else {
                     printf("HYERIN: no corresponding file found to fill!\n");
                 }
