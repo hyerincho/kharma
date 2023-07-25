@@ -60,9 +60,9 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
         fx1max = pmb->packages.Get("GRMHD")->Param<Real>("rx1max");
         n1tot = pmb->packages.Get("GRMHD")->Param<int>("rnx1");
         dx1 = (fx1max - fx1min) / n1tot;
-        fx1min_ghost = fx1min - 4*dx1;
+        fx1min_ghost = fx1min - 4*dx1; // TODO Hyerin (07/23/23) instead of 4, need to use nghost
     }
-    auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill", "none");
+    auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill1", "none");
     const bool should_fill = !(fname_fill == "none");
 
     Real min_rho_q = pin->GetOrAddReal("b_field", "min_rho_q", 0.2);

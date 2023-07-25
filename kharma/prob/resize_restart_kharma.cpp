@@ -75,6 +75,12 @@ void ReadFillFile(int i, std::unique_ptr<ParameterInput>& pin) {
 
         Real fx1min = fpinput->GetReal("parthenon/mesh", "x1min");
         Real fx1max = fpinput->GetReal("parthenon/mesh", "x1max");
+        Real fnx1 = fpinput->GetInteger("parthenon/mesh", "nx1");
+        Real fnx2 = fpinput->GetInteger("parthenon/mesh", "nx2");
+        Real fnx3 = fpinput->GetInteger("parthenon/mesh", "nx3");
+        Real fmbnx1 = fpinput->GetInteger("parthenon/meshblock", "nx1");
+        Real fmbnx2 = fpinput->GetInteger("parthenon/meshblock", "nx2");
+        Real fmbnx3 = fpinput->GetInteger("parthenon/meshblock", "nx3");
         
         restartReader = nullptr;
 
@@ -83,6 +89,16 @@ void ReadFillFile(int i, std::unique_ptr<ParameterInput>& pin) {
 
         sprintf(str, "restart_x1max_f%d", i);
         pin->SetReal("parthenon/mesh", str, fx1max);
+
+        sprintf(str, "restart%d_nx1", i);
+        pin->SetInteger("parthenon/mesh", str, fnx1);
+        pin->SetInteger("parthenon/meshblock", str, fmbnx1);
+        sprintf(str, "restart%d_nx2", i);
+        pin->SetInteger("parthenon/mesh", str, fnx2);
+        pin->SetInteger("parthenon/meshblock", str, fmbnx2);
+        sprintf(str, "restart%d_nx3", i);
+        pin->SetInteger("parthenon/mesh", str, fnx3);
+        pin->SetInteger("parthenon/meshblock", str, fmbnx3);
     }
 }
 
@@ -228,6 +244,13 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
     const Real fx1max_f5 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f5", -1);
     const Real fx1min_f6 = pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f6", -1);
     const Real fx1max_f6 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f6", -1);
+    // TODO Hyerin (07/23/23) assume all the "fill" files have the same dimension.
+    const int f_n1tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx1", -1);
+    const int f_n2tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx2", -1);
+    const int f_n3tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx3", -1);
+    const int f_n1mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx1", -1);
+    const int f_n2mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx2", -1);
+    const int f_n3mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx3", -1);
     const Real x1min = pin->GetReal("parthenon/mesh", "x1min");
     const Real x2min = pin->GetReal("parthenon/mesh", "x2min");
     const Real x2max = pin->GetReal("parthenon/mesh", "x2max");
@@ -253,6 +276,18 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
         pmb->packages.Get("GRMHD")->AddParam<int>("rmbnx2", n2mb);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rmbnx3")))
         pmb->packages.Get("GRMHD")->AddParam<int>("rmbnx3", n3mb);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rfnx1")))
+        pmb->packages.Get("GRMHD")->AddParam<int>("rfnx1", f_n1tot);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rfnx2")))
+        pmb->packages.Get("GRMHD")->AddParam<int>("rfnx2", f_n2tot);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rfnx3")))
+        pmb->packages.Get("GRMHD")->AddParam<int>("rfnx3", f_n3tot);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rfmbnx1")))
+        pmb->packages.Get("GRMHD")->AddParam<int>("rfmbnx1", f_n1mb);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rfmbnx2")))
+        pmb->packages.Get("GRMHD")->AddParam<int>("rfmbnx2", f_n2mb);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rfmbnx3")))
+        pmb->packages.Get("GRMHD")->AddParam<int>("rfmbnx3", f_n3mb);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("fname")))
         pmb->packages.Get("GRMHD")->AddParam<std::string>("fname", fname);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("fname_fill1")))
@@ -364,6 +399,13 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     hsize_t n2mb = pmb->packages.Get("GRMHD")->Param<int>("rmbnx2");
     hsize_t n3mb = pmb->packages.Get("GRMHD")->Param<int>("rmbnx3");
     hsize_t nBlocks = (int) (n1tot*n2tot*n3tot)/(n1mb*n2mb*n3mb);
+    const int f_n1tot = pmb->packages.Get("GRMHD")->Param<int>("rfnx1");
+    const int f_n2tot = pmb->packages.Get("GRMHD")->Param<int>("rfnx2");
+    const int f_n3tot = pmb->packages.Get("GRMHD")->Param<int>("rfnx3");
+    hsize_t f_n1mb = pmb->packages.Get("GRMHD")->Param<int>("rfmbnx1");
+    hsize_t f_n2mb = pmb->packages.Get("GRMHD")->Param<int>("rfmbnx2");
+    hsize_t f_n3mb = pmb->packages.Get("GRMHD")->Param<int>("rfmbnx3");
+    hsize_t f_nBlocks = (int) (f_n1tot*f_n2tot*f_n3tot)/(f_n1mb*f_n2mb*f_n3mb);
     auto fname = pmb->packages.Get("GRMHD")->Param<std::string>("fname");
     auto fname_fill1 = pmb->packages.Get("GRMHD")->Param<std::string>("fname_fill1");
     auto fname_fill2 = pmb->packages.Get("GRMHD")->Param<std::string>("fname_fill2");
@@ -423,6 +465,11 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                                     n2mb+2*fnghost,
                                     n3mb+2*fnghost*x3factor}; 
         const int block_sz = length[0]*length[1]*length[2]*length[3];
+        hsize_t f_length[GR_DIM] = {f_nBlocks,
+                                    f_n1mb+2*fnghost,
+                                    f_n2mb+2*fnghost,
+                                    f_n3mb+2*fnghost*x3factor}; 
+        const int f_block_sz = f_length[0]*f_length[1]*f_length[2]*f_length[3];
         //std::cout << "lengths " << length[0]  << " " << length[1] <<" " <<  length[2]<<" " << length[3] << std::endl;
         //printf("lengths %i %i %i %i \n", length[0], length[1], length[2], length[3]);
         
@@ -471,13 +518,13 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         hdf5_read_array(x3_file, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
         hdf5_close();
         
-        GridScalar x1_fill1_device("x1_fill1_device", length[0], length[1]); 
-        GridScalar x2_fill1_device("x2_fill1_device", length[0], length[2]); 
-        GridScalar x3_fill1_device("x2_fill1_device", length[0], length[3]); 
-        GridScalar rho_fill1_device("rho_fill1_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill1_device("u_fill1_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill1_device("uvec_fill1_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill1_device("B_fill1_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill1_device("x1_fill1_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill1_device("x2_fill1_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill1_device("x2_fill1_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill1_device("rho_fill1_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill1_device("u_fill1_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill1_device("uvec_fill1_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill1_device("B_fill1_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill1_host = x1_fill1_device.GetHostMirror();
         auto x2_fill1_host = x2_fill1_device.GetHostMirror();
         auto x3_fill1_host = x3_fill1_device.GetHostMirror();
@@ -485,33 +532,38 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill1_host = u_fill1_device.GetHostMirror();
         auto uvec_fill1_host = uvec_fill1_device.GetHostMirror();
         auto B_fill1_host = B_fill1_device.GetHostMirror();
-        Real *rho_filefill1 = new double[block_sz];
-        Real *u_filefill1 = new double[block_sz];
-        Real *uvec_filefill1 = new double[block_sz*3];
-        Real *B_filefill1 = new double[block_sz*3];
-        Real *x1_filefill1 = new double[length[0]*length[1]];
-        Real *x2_filefill1 = new double[length[0]*length[2]];
-        Real *x3_filefill1 = new double[length[0]*length[3]];
+        Real *rho_filefill1 = new double[f_block_sz];
+        Real *u_filefill1 = new double[f_block_sz];
+        Real *uvec_filefill1 = new double[f_block_sz*3];
+        Real *B_filefill1 = new double[f_block_sz*3];
+        Real *x1_filefill1 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill1 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill1 = new double[f_length[0]*f_length[3]];
+        static hsize_t fill_fdims[] = {f_length[0], 1, f_length[3], f_length[2], f_length[1]};
+        static hsize_t fill_fdims_vec[] = {f_length[0], 3, f_length[3], f_length[2], f_length[1]};
+        static hsize_t fill_fdims_x1[] = {f_length[0], f_length[1]};
+        static hsize_t fill_fdims_x2[] = {f_length[0], f_length[2]};
+        static hsize_t fill_fdims_x3[] = {f_length[0], f_length[3]};
         if (should_fill1) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill1.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill1, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill1, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill1, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill1, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill1, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill1, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill1, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill1, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill1, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill1, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill1, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill1, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill1, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill1, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
-        GridScalar x1_fill2_device("x1_fill2_device", length[0], length[1]); 
-        GridScalar x2_fill2_device("x2_fill2_device", length[0], length[2]); 
-        GridScalar x3_fill2_device("x2_fill2_device", length[0], length[3]); 
-        GridScalar rho_fill2_device("rho_fill2_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill2_device("u_fill2_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill2_device("uvec_fill2_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill2_device("B_fill2_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill2_device("x1_fill2_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill2_device("x2_fill2_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill2_device("x2_fill2_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill2_device("rho_fill2_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill2_device("u_fill2_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill2_device("uvec_fill2_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill2_device("B_fill2_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill2_host = x1_fill2_device.GetHostMirror();
         auto x2_fill2_host = x2_fill2_device.GetHostMirror();
         auto x3_fill2_host = x3_fill2_device.GetHostMirror();
@@ -519,33 +571,33 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill2_host = u_fill2_device.GetHostMirror();
         auto uvec_fill2_host = uvec_fill2_device.GetHostMirror();
         auto B_fill2_host = B_fill2_device.GetHostMirror();
-        Real *rho_filefill2 = new double[block_sz];
-        Real *u_filefill2 = new double[block_sz];
-        Real *uvec_filefill2 = new double[block_sz*3];
-        Real *B_filefill2 = new double[block_sz*3];
-        Real *x1_filefill2 = new double[length[0]*length[1]];
-        Real *x2_filefill2 = new double[length[0]*length[2]];
-        Real *x3_filefill2 = new double[length[0]*length[3]];
+        Real *rho_filefill2 = new double[f_block_sz];
+        Real *u_filefill2 = new double[f_block_sz];
+        Real *uvec_filefill2 = new double[f_block_sz*3];
+        Real *B_filefill2 = new double[f_block_sz*3];
+        Real *x1_filefill2 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill2 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill2 = new double[f_length[0]*f_length[3]];
         if (should_fill2) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill2.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill2, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill2, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill2, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill2, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill2, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill2, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill2, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill2, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill2, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill2, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill2, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill2, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill2, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill2, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
-        GridScalar x1_fill3_device("x1_fill3_device", length[0], length[1]); 
-        GridScalar x2_fill3_device("x2_fill3_device", length[0], length[2]); 
-        GridScalar x3_fill3_device("x2_fill3_device", length[0], length[3]); 
-        GridScalar rho_fill3_device("rho_fill3_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill3_device("u_fill3_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill3_device("uvec_fill3_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill3_device("B_fill3_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill3_device("x1_fill3_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill3_device("x2_fill3_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill3_device("x2_fill3_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill3_device("rho_fill3_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill3_device("u_fill3_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill3_device("uvec_fill3_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill3_device("B_fill3_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill3_host = x1_fill3_device.GetHostMirror();
         auto x2_fill3_host = x2_fill3_device.GetHostMirror();
         auto x3_fill3_host = x3_fill3_device.GetHostMirror();
@@ -553,33 +605,33 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill3_host = u_fill3_device.GetHostMirror();
         auto uvec_fill3_host = uvec_fill3_device.GetHostMirror();
         auto B_fill3_host = B_fill3_device.GetHostMirror();
-        Real *rho_filefill3 = new double[block_sz];
-        Real *u_filefill3 = new double[block_sz];
-        Real *uvec_filefill3 = new double[block_sz*3];
-        Real *B_filefill3 = new double[block_sz*3];
-        Real *x1_filefill3 = new double[length[0]*length[1]];
-        Real *x2_filefill3 = new double[length[0]*length[2]];
-        Real *x3_filefill3 = new double[length[0]*length[3]];
+        Real *rho_filefill3 = new double[f_block_sz];
+        Real *u_filefill3 = new double[f_block_sz];
+        Real *uvec_filefill3 = new double[f_block_sz*3];
+        Real *B_filefill3 = new double[f_block_sz*3];
+        Real *x1_filefill3 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill3 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill3 = new double[f_length[0]*f_length[3]];
         if (should_fill3) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill3.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill3, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill3, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill3, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill3, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill3, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill3, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill3, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill3, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill3, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill3, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill3, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill3, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill3, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill3, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
-        GridScalar x1_fill4_device("x1_fill4_device", length[0], length[1]); 
-        GridScalar x2_fill4_device("x2_fill4_device", length[0], length[2]); 
-        GridScalar x3_fill4_device("x2_fill4_device", length[0], length[3]); 
-        GridScalar rho_fill4_device("rho_fill4_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill4_device("u_fill4_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill4_device("uvec_fill4_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill4_device("B_fill4_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill4_device("x1_fill4_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill4_device("x2_fill4_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill4_device("x2_fill4_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill4_device("rho_fill4_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill4_device("u_fill4_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill4_device("uvec_fill4_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill4_device("B_fill4_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill4_host = x1_fill4_device.GetHostMirror();
         auto x2_fill4_host = x2_fill4_device.GetHostMirror();
         auto x3_fill4_host = x3_fill4_device.GetHostMirror();
@@ -587,33 +639,33 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill4_host = u_fill4_device.GetHostMirror();
         auto uvec_fill4_host = uvec_fill4_device.GetHostMirror();
         auto B_fill4_host = B_fill4_device.GetHostMirror();
-        Real *rho_filefill4 = new double[block_sz];
-        Real *u_filefill4 = new double[block_sz];
-        Real *uvec_filefill4 = new double[block_sz*3];
-        Real *B_filefill4 = new double[block_sz*3];
-        Real *x1_filefill4 = new double[length[0]*length[1]];
-        Real *x2_filefill4 = new double[length[0]*length[2]];
-        Real *x3_filefill4 = new double[length[0]*length[3]];
+        Real *rho_filefill4 = new double[f_block_sz];
+        Real *u_filefill4 = new double[f_block_sz];
+        Real *uvec_filefill4 = new double[f_block_sz*3];
+        Real *B_filefill4 = new double[f_block_sz*3];
+        Real *x1_filefill4 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill4 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill4 = new double[f_length[0]*f_length[3]];
         if (should_fill4) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill4.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill4, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill4, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill4, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill4, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill4, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill4, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill4, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill4, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill4, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill4, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill4, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill4, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill4, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill4, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
-        GridScalar x1_fill5_device("x1_fill5_device", length[0], length[1]); 
-        GridScalar x2_fill5_device("x2_fill5_device", length[0], length[2]); 
-        GridScalar x3_fill5_device("x2_fill5_device", length[0], length[3]); 
-        GridScalar rho_fill5_device("rho_fill5_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill5_device("u_fill5_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill5_device("uvec_fill5_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill5_device("B_fill5_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill5_device("x1_fill5_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill5_device("x2_fill5_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill5_device("x2_fill5_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill5_device("rho_fill5_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill5_device("u_fill5_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill5_device("uvec_fill5_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill5_device("B_fill5_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill5_host = x1_fill5_device.GetHostMirror();
         auto x2_fill5_host = x2_fill5_device.GetHostMirror();
         auto x3_fill5_host = x3_fill5_device.GetHostMirror();
@@ -621,33 +673,33 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill5_host = u_fill5_device.GetHostMirror();
         auto uvec_fill5_host = uvec_fill5_device.GetHostMirror();
         auto B_fill5_host = B_fill5_device.GetHostMirror();
-        Real *rho_filefill5 = new double[block_sz];
-        Real *u_filefill5 = new double[block_sz];
-        Real *uvec_filefill5 = new double[block_sz*3];
-        Real *B_filefill5 = new double[block_sz*3];
-        Real *x1_filefill5 = new double[length[0]*length[1]];
-        Real *x2_filefill5 = new double[length[0]*length[2]];
-        Real *x3_filefill5 = new double[length[0]*length[3]];
+        Real *rho_filefill5 = new double[f_block_sz];
+        Real *u_filefill5 = new double[f_block_sz];
+        Real *uvec_filefill5 = new double[f_block_sz*3];
+        Real *B_filefill5 = new double[f_block_sz*3];
+        Real *x1_filefill5 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill5 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill5 = new double[f_length[0]*f_length[3]];
         if (should_fill5) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill5.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill5, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill5, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill5, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill5, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill5, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill5, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill5, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill5, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill5, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill5, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill5, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill5, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill5, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill5, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
-        GridScalar x1_fill6_device("x1_fill6_device", length[0], length[1]); 
-        GridScalar x2_fill6_device("x2_fill6_device", length[0], length[2]); 
-        GridScalar x3_fill6_device("x2_fill6_device", length[0], length[3]); 
-        GridScalar rho_fill6_device("rho_fill6_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill6_device("u_fill6_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill6_device("uvec_fill6_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill6_device("B_fill6_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill6_device("x1_fill6_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill6_device("x2_fill6_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill6_device("x2_fill6_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill6_device("rho_fill6_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill6_device("u_fill6_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill6_device("uvec_fill6_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill6_device("B_fill6_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill6_host = x1_fill6_device.GetHostMirror();
         auto x2_fill6_host = x2_fill6_device.GetHostMirror();
         auto x3_fill6_host = x3_fill6_device.GetHostMirror();
@@ -655,33 +707,33 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill6_host = u_fill6_device.GetHostMirror();
         auto uvec_fill6_host = uvec_fill6_device.GetHostMirror();
         auto B_fill6_host = B_fill6_device.GetHostMirror();
-        Real *rho_filefill6 = new double[block_sz];
-        Real *u_filefill6 = new double[block_sz];
-        Real *uvec_filefill6 = new double[block_sz*3];
-        Real *B_filefill6 = new double[block_sz*3];
-        Real *x1_filefill6 = new double[length[0]*length[1]];
-        Real *x2_filefill6 = new double[length[0]*length[2]];
-        Real *x3_filefill6 = new double[length[0]*length[3]];
+        Real *rho_filefill6 = new double[f_block_sz];
+        Real *u_filefill6 = new double[f_block_sz];
+        Real *uvec_filefill6 = new double[f_block_sz*3];
+        Real *B_filefill6 = new double[f_block_sz*3];
+        Real *x1_filefill6 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill6 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill6 = new double[f_length[0]*f_length[3]];
         if (should_fill6) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill6.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill6, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill6, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill6, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill6, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill6, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill6, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill6, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill6, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill6, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill6, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill6, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill6, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill6, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill6, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
-        GridScalar x1_fill7_device("x1_fill7_device", length[0], length[1]); 
-        GridScalar x2_fill7_device("x2_fill7_device", length[0], length[2]); 
-        GridScalar x3_fill7_device("x2_fill7_device", length[0], length[3]); 
-        GridScalar rho_fill7_device("rho_fill7_device", length[0], length[3], length[2], length[1]); 
-        GridScalar u_fill7_device("u_fill7_device", length[0], length[3], length[2], length[1]); 
-        GridVector uvec_fill7_device("uvec_fill7_device", NVEC, length[0], length[3], length[2], length[1]); 
-        GridVector B_fill7_device("B_fill7_device", NVEC, length[0], length[3], length[2], length[1]); 
+        GridScalar x1_fill7_device("x1_fill7_device", f_length[0], f_length[1]); 
+        GridScalar x2_fill7_device("x2_fill7_device", f_length[0], f_length[2]); 
+        GridScalar x3_fill7_device("x2_fill7_device", f_length[0], f_length[3]); 
+        GridScalar rho_fill7_device("rho_fill7_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridScalar u_fill7_device("u_fill7_device", f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector uvec_fill7_device("uvec_fill7_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
+        GridVector B_fill7_device("B_fill7_device", NVEC, f_length[0], f_length[3], f_length[2], f_length[1]); 
         auto x1_fill7_host = x1_fill7_device.GetHostMirror();
         auto x2_fill7_host = x2_fill7_device.GetHostMirror();
         auto x3_fill7_host = x3_fill7_device.GetHostMirror();
@@ -689,23 +741,23 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         auto u_fill7_host = u_fill7_device.GetHostMirror();
         auto uvec_fill7_host = uvec_fill7_device.GetHostMirror();
         auto B_fill7_host = B_fill7_device.GetHostMirror();
-        Real *rho_filefill7 = new double[block_sz];
-        Real *u_filefill7 = new double[block_sz];
-        Real *uvec_filefill7 = new double[block_sz*3];
-        Real *B_filefill7 = new double[block_sz*3];
-        Real *x1_filefill7 = new double[length[0]*length[1]];
-        Real *x2_filefill7 = new double[length[0]*length[2]];
-        Real *x3_filefill7 = new double[length[0]*length[3]];
+        Real *rho_filefill7 = new double[f_block_sz];
+        Real *u_filefill7 = new double[f_block_sz];
+        Real *uvec_filefill7 = new double[f_block_sz*3];
+        Real *B_filefill7 = new double[f_block_sz*3];
+        Real *x1_filefill7 = new double[f_length[0]*f_length[1]];
+        Real *x2_filefill7 = new double[f_length[0]*f_length[2]];
+        Real *x3_filefill7 = new double[f_length[0]*f_length[3]];
         if (should_fill7) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill7.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill7, "prims.rho", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill7, "prims.u", 5, fdims, fstart,fdims,fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill7, "prims.uvec", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill7, "cons.B", 5, fdims_vec, fstart,fdims_vec,fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill7, "VolumeLocations/x", 2, fdims_x1, fstart_x,fdims_x1,fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill7, "VolumeLocations/y", 2, fdims_x2, fstart_x,fdims_x2,fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill7, "VolumeLocations/z", 2, fdims_x3, fstart_x,fdims_x3,fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill7, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill7, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill7, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill7, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill7, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill7, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill7, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
             hdf5_close();
         }
 
@@ -713,31 +765,37 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         for (int iblocktemp = 0; iblocktemp < length[0]; iblocktemp++) {
             for (int itemp = 0; itemp < length[1]; itemp++) {
                 x1_f_host(iblocktemp,itemp) = x1_file[length[1]*iblocktemp+itemp];
-                if (should_fill1) x1_fill1_host(iblocktemp,itemp) = x1_filefill1[length[1]*iblocktemp+itemp];
-                if (should_fill2) x1_fill2_host(iblocktemp,itemp) = x1_filefill2[length[1]*iblocktemp+itemp];
-                if (should_fill3) x1_fill3_host(iblocktemp,itemp) = x1_filefill3[length[1]*iblocktemp+itemp];
-                if (should_fill4) x1_fill4_host(iblocktemp,itemp) = x1_filefill4[length[1]*iblocktemp+itemp];
-                if (should_fill5) x1_fill5_host(iblocktemp,itemp) = x1_filefill5[length[1]*iblocktemp+itemp];
-                if (should_fill6) x1_fill6_host(iblocktemp,itemp) = x1_filefill6[length[1]*iblocktemp+itemp];
-                if (should_fill7) x1_fill7_host(iblocktemp,itemp) = x1_filefill7[length[1]*iblocktemp+itemp];
             } for (int jtemp = 0; jtemp < length[2]; jtemp++) {
                 x2_f_host(iblocktemp,jtemp) = x2_file[length[2]*iblocktemp+jtemp];
-                if (should_fill1) x2_fill1_host(iblocktemp,jtemp) = x2_filefill1[length[2]*iblocktemp+jtemp];
-                if (should_fill2) x2_fill2_host(iblocktemp,jtemp) = x2_filefill2[length[2]*iblocktemp+jtemp];
-                if (should_fill3) x2_fill3_host(iblocktemp,jtemp) = x2_filefill3[length[2]*iblocktemp+jtemp];
-                if (should_fill4) x2_fill4_host(iblocktemp,jtemp) = x2_filefill4[length[2]*iblocktemp+jtemp];
-                if (should_fill5) x2_fill5_host(iblocktemp,jtemp) = x2_filefill5[length[2]*iblocktemp+jtemp];
-                if (should_fill6) x2_fill6_host(iblocktemp,jtemp) = x2_filefill6[length[2]*iblocktemp+jtemp];
-                if (should_fill7) x2_fill7_host(iblocktemp,jtemp) = x2_filefill7[length[2]*iblocktemp+jtemp];
             } for (int ktemp = 0; ktemp < length[3]; ktemp++) {
                 x3_f_host(iblocktemp,ktemp) = x3_file[length[3]*iblocktemp+ktemp];
-                if (should_fill1) x3_fill1_host(iblocktemp,ktemp) = x3_filefill1[length[3]*iblocktemp+ktemp];
-                if (should_fill2) x3_fill2_host(iblocktemp,ktemp) = x3_filefill2[length[3]*iblocktemp+ktemp];
-                if (should_fill3) x3_fill3_host(iblocktemp,ktemp) = x3_filefill3[length[3]*iblocktemp+ktemp];
-                if (should_fill4) x3_fill4_host(iblocktemp,ktemp) = x3_filefill4[length[3]*iblocktemp+ktemp];
-                if (should_fill5) x3_fill5_host(iblocktemp,ktemp) = x3_filefill5[length[3]*iblocktemp+ktemp];
-                if (should_fill6) x3_fill6_host(iblocktemp,ktemp) = x3_filefill6[length[3]*iblocktemp+ktemp];
-                if (should_fill7) x3_fill7_host(iblocktemp,ktemp) = x3_filefill7[length[3]*iblocktemp+ktemp];
+            }
+        }
+        for (int iblocktemp = 0; iblocktemp < f_length[0]; iblocktemp++) {
+            for (int itemp = 0; itemp < f_length[1]; itemp++) {
+                if (should_fill1) x1_fill1_host(iblocktemp,itemp) = x1_filefill1[f_length[1]*iblocktemp+itemp];
+                if (should_fill2) x1_fill2_host(iblocktemp,itemp) = x1_filefill2[f_length[1]*iblocktemp+itemp];
+                if (should_fill3) x1_fill3_host(iblocktemp,itemp) = x1_filefill3[f_length[1]*iblocktemp+itemp];
+                if (should_fill4) x1_fill4_host(iblocktemp,itemp) = x1_filefill4[f_length[1]*iblocktemp+itemp];
+                if (should_fill5) x1_fill5_host(iblocktemp,itemp) = x1_filefill5[f_length[1]*iblocktemp+itemp];
+                if (should_fill6) x1_fill6_host(iblocktemp,itemp) = x1_filefill6[f_length[1]*iblocktemp+itemp];
+                if (should_fill7) x1_fill7_host(iblocktemp,itemp) = x1_filefill7[f_length[1]*iblocktemp+itemp];
+            } for (int jtemp = 0; jtemp < f_length[2]; jtemp++) {
+                if (should_fill1) x2_fill1_host(iblocktemp,jtemp) = x2_filefill1[f_length[2]*iblocktemp+jtemp];
+                if (should_fill2) x2_fill2_host(iblocktemp,jtemp) = x2_filefill2[f_length[2]*iblocktemp+jtemp];
+                if (should_fill3) x2_fill3_host(iblocktemp,jtemp) = x2_filefill3[f_length[2]*iblocktemp+jtemp];
+                if (should_fill4) x2_fill4_host(iblocktemp,jtemp) = x2_filefill4[f_length[2]*iblocktemp+jtemp];
+                if (should_fill5) x2_fill5_host(iblocktemp,jtemp) = x2_filefill5[f_length[2]*iblocktemp+jtemp];
+                if (should_fill6) x2_fill6_host(iblocktemp,jtemp) = x2_filefill6[f_length[2]*iblocktemp+jtemp];
+                if (should_fill7) x2_fill7_host(iblocktemp,jtemp) = x2_filefill7[f_length[2]*iblocktemp+jtemp];
+            } for (int ktemp = 0; ktemp < f_length[3]; ktemp++) {
+                if (should_fill1) x3_fill1_host(iblocktemp,ktemp) = x3_filefill1[f_length[3]*iblocktemp+ktemp];
+                if (should_fill2) x3_fill2_host(iblocktemp,ktemp) = x3_filefill2[f_length[3]*iblocktemp+ktemp];
+                if (should_fill3) x3_fill3_host(iblocktemp,ktemp) = x3_filefill3[f_length[3]*iblocktemp+ktemp];
+                if (should_fill4) x3_fill4_host(iblocktemp,ktemp) = x3_filefill4[f_length[3]*iblocktemp+ktemp];
+                if (should_fill5) x3_fill5_host(iblocktemp,ktemp) = x3_filefill5[f_length[3]*iblocktemp+ktemp];
+                if (should_fill6) x3_fill6_host(iblocktemp,ktemp) = x3_filefill6[f_length[3]*iblocktemp+ktemp];
+                if (should_fill7) x3_fill7_host(iblocktemp,ktemp) = x3_filefill7[f_length[3]*iblocktemp+ktemp];
             }
         }
         // re-arrange uvec such that it can be read in the VLOOP
@@ -750,6 +808,22 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
 
                         rho_f_host(iblocktemp,ktemp,jtemp,itemp) = rho_file[scalar_file_index];
                         u_f_host(iblocktemp,ktemp,jtemp,itemp) = u_file[scalar_file_index];
+                        for (int ltemp = 0; ltemp < 3; ltemp++) {
+                            //vector_file_index = 3*(scalar_file_index)+ltemp; // outdated parthenon phdf5 saving order
+                            vector_file_index = length[1]*(length[2]*(length[3]*(3*iblocktemp+ltemp)+ktemp)+jtemp)+itemp;
+                            
+                            uvec_f_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_file[vector_file_index];
+                            if (include_B) B_f_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_file[vector_file_index];
+                        }
+                    }
+                }
+            }
+        }
+        for (int iblocktemp = 0; iblocktemp < f_length[0]; iblocktemp++) {
+            for (int itemp = 0; itemp < f_length[1]; itemp++) {
+                for (int jtemp = 0; jtemp < f_length[2]; jtemp++) {
+                    for (int ktemp = 0; ktemp < f_length[3]; ktemp++) {
+                        scalar_file_index = f_length[1]*(f_length[2]*(f_length[3]*iblocktemp+ktemp)+jtemp)+itemp;
                         if (should_fill1) {
                             rho_fill1_host(iblocktemp,ktemp,jtemp,itemp) = rho_filefill1[scalar_file_index];
                             u_fill1_host(iblocktemp,ktemp,jtemp,itemp) = u_filefill1[scalar_file_index];
@@ -779,11 +853,7 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                             u_fill7_host(iblocktemp,ktemp,jtemp,itemp) = u_filefill7[scalar_file_index];
                         }
                         for (int ltemp = 0; ltemp < 3; ltemp++) {
-                            //vector_file_index = 3*(scalar_file_index)+ltemp; // outdated parthenon phdf5 saving order
-                            vector_file_index = length[1]*(length[2]*(length[3]*(3*iblocktemp+ltemp)+ktemp)+jtemp)+itemp;
-                            
-                            uvec_f_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_file[vector_file_index];
-                            if (include_B) B_f_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_file[vector_file_index];
+                            vector_file_index = f_length[1]*(f_length[2]*(f_length[3]*(3*iblocktemp+ltemp)+ktemp)+jtemp)+itemp;
                             if (should_fill1) {
                                 uvec_fill1_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = uvec_filefill1[vector_file_index];
                                 if (include_B) B_fill1_host(ltemp,iblocktemp,ktemp,jtemp,itemp) = B_filefill1[vector_file_index];
@@ -907,41 +977,42 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                         x1_f_device, x2_f_device, x3_f_device, rho_f_device, u_f_device, uvec_f_device,
                         k, j, i);
                     if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_f_device, x2_f_device, x3_f_device, B_f_device, B_Save, k, j, i);
-                } else if ((should_fill1) && (X[1]>=fx1min_f1) && (X[1]<=fx1max_f1)) { // fill with the fname_fill1
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                } else if ((should_fill1) && (X[1]>=fx1min_f1 - fnghost*dx[1]) && (X[1]<=fx1max_f1 + fnghost*dx[1])) { // fill with the fname_fill1
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill1_device, x2_fill1_device, x3_fill1_device, rho_fill1_device, u_fill1_device, uvec_fill1_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill1_device, x2_fill1_device, x3_fill1_device, B_fill1_device, B_Save, k, j, i);
-                } else if ((should_fill2) && (X[1]>=fx1min_f2) && (X[1]<=fx1max_f2)) { // fill with the fname_fill2
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill1_device, x2_fill1_device, x3_fill1_device, B_fill1_device, B_Save, k, j, i);
+                // TODO Hyerin (07/23/23) should also use x1min x1max including ghosts?
+                } else if ((should_fill2) && (X[1]>=fx1min_f2 - fnghost*dx[1]) && (X[1]<=fx1max_f2 + fnghost*dx[1])) { // fill with the fname_fill2
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill2_device, x2_fill2_device, x3_fill2_device, rho_fill2_device, u_fill2_device, uvec_fill2_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill2_device, x2_fill2_device, x3_fill2_device, B_fill2_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill2_device, x2_fill2_device, x3_fill2_device, B_fill2_device, B_Save, k, j, i);
                 } else if ((should_fill3) && (X[1]>=fx1min_f3) && (X[1]<=fx1max_f3)) { // fill with the fname_fill3
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill3_device, x2_fill3_device, x3_fill3_device, rho_fill3_device, u_fill3_device, uvec_fill3_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill3_device, x2_fill3_device, x3_fill3_device, B_fill3_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill3_device, x2_fill3_device, x3_fill3_device, B_fill3_device, B_Save, k, j, i);
                 } else if ((should_fill4) && (X[1]>=fx1min_f4) && (X[1]<=fx1max_f4)) { // fill with the fname_fill4
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill4_device, x2_fill4_device, x3_fill4_device, rho_fill4_device, u_fill4_device, uvec_fill4_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill4_device, x2_fill4_device, x3_fill4_device, B_fill4_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill4_device, x2_fill4_device, x3_fill4_device, B_fill4_device, B_Save, k, j, i);
                 } else if ((should_fill5) && (X[1]>=fx1min_f5) && (X[1]<=fx1max_f5)) { // fill with the fname_fill5
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill5_device, x2_fill5_device, x3_fill5_device, rho_fill5_device, u_fill5_device, uvec_fill5_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill5_device, x2_fill5_device, x3_fill5_device, B_fill5_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill5_device, x2_fill5_device, x3_fill5_device, B_fill5_device, B_Save, k, j, i);
                 } else if ((should_fill6) && (X[1]>=fx1min_f6) && (X[1]<=fx1max_f6)) { // fill with the fname_fill6
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill6_device, x2_fill6_device, x3_fill6_device, rho_fill6_device, u_fill6_device, uvec_fill6_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill6_device, x2_fill6_device, x3_fill6_device, B_fill6_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill6_device, x2_fill6_device, x3_fill6_device, B_fill6_device, B_Save, k, j, i);
                 } else if (should_fill7) { // fill with the fname_fill7
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                    get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill7_device, x2_fill7_device, x3_fill7_device, rho_fill7_device, u_fill7_device, uvec_fill7_device,
                         k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_fill7_device, x2_fill7_device, x3_fill7_device, B_fill7_device, B_Save, k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill7_device, x2_fill7_device, x3_fill7_device, B_fill7_device, B_Save, k, j, i);
                 } else {
                     printf("HYERIN: no corresponding file found to fill!\n");
                 }

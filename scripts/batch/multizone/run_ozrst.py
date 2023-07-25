@@ -58,6 +58,8 @@ def data_dir(n):
 @click.option('--gizmo', is_flag=True, help="Start from GIZMO data")
 @click.option('--gizmo_fname', default="../gizmo_data.txt", help="Filename of GIZMO data")
 @click.option('--ext_g', is_flag=True, help="Include external gravity")
+@click.option('--in2out', is_flag=True, help="Only go from in to out")
+@click.option('--out2in', is_flag=True, help="Only go from out to in")
 # Don't use this
 @click.option('--start_time', default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -124,7 +126,8 @@ def run_multizone(**kwargs):
 
         args['b_field/type'] = "vertical"
         args['b_field/initial_cleanup'] = 1
-        args['b_cleanup/rel_tolerance'] = 1.0e-3 #8 #12
+        args['b_cleanup/rel_tolerance'] = 1e-2 # 1e-3 #
+        args['b_cleanup/use_normalized_divb'] = 0 #1 #
 
         turn_around = kwargs['nzones'] - 1
         args['coordinates/r_out'] = base**(turn_around+2)
@@ -196,7 +199,7 @@ def run_multizone(**kwargs):
         kwargs['parfile'] = mz_dir+"/multizone.par"
 
     # Iterate, starting with the default args and updating as we go
-    for run_num in np.arange(kwargs['start_run'], kwargs['nruns']):
+    for run_num in np.arange(kwargs['start_run'], kwargs['nruns'] + kwargs['nzones']):
         # run times for each annulus
         r_out = args['coordinates/r_out']
         r_b = float(kwargs['r_b'])
@@ -265,7 +268,7 @@ def update_args(run_num, kwargs, args):
     args['parthenon/job/problem_id']="resize_restart_kharma"
 
     # Filename to restart from
-    fname_dir = "{:05d}".format(run_num)
+    fname_dir = data_dir(run_num)
     fname=glob.glob(fname_dir+"/*final.rhdf")[0]
     # Get start_time, ncycle, dt from previous run
     kwargs['start_time'] = pyharm.io.get_dump_time(fname)
@@ -280,16 +283,83 @@ def update_args(run_num, kwargs, args):
     f.close()
 
     # Increment iteration count when we just finished the outermost zone
-    if run_num > 0 and run_num % (kwargs['nzones'] - 1) == 0:
+    if run_num > 1 and (run_num - 1) % (kwargs['nzones'] - 1) == 0:
         iteration += 1
     args['resize_restart/iteration'] = iteration
 
     # Are we moving inward?
-    out_to_in=(-1)**(1+iteration) # if iteration odd, out_to_in=1, if even, out_to_in=-1
-    # if out_to_in > 0:
-    #   print("Moving inward:")
-    # else:
-    #   print("Moving outward:")
+    if kwargs['in2out']:
+        out_to_in=-1
+    elif kwargs['out2in']:
+        out_to_in=1
+    else:
+        out_to_in=(-1)**(1+iteration) # if iteration odd, out_to_in=1, if even, out_to_in=-1
+    
+    outermost = False # about to simulate the outermost annulus
+    innermost = 0 # go back to innermost annulus
+    fname_fill2 = 'none'
+    if int(np.log(last_r_in)/np.log(kwargs['base'])) == kwargs['nzones']-2:
+        outermost = True
+    if run_num > 0:
+        if out_to_in > 0:
+            if last_r_in <= 1:
+                if not kwargs['out2in']: print("WARNING: r_out beyond maximum radius")
+                args['coordinates/r_out'] = kwargs['base']**(kwargs['nzones'] + 1)
+                args['coordinates/r_in'] = args['coordinates/r_out'] / kwargs['base']**2
+            else:
+                args['coordinates/r_out'] = last_r_out / kwargs['base']
+                args['coordinates/r_in'] = last_r_in / kwargs['base']
+        else:
+            if last_r_out >= kwargs['base']**(kwargs['nzones'] + 1):
+                if not kwargs['in2out']: print("WARNING: r_out beyond maximum radius")
+                args['coordinates/r_out'] = kwargs['base']**2
+                args['coordinates/r_in'] = 1
+                #if run_num < kwargs['nruns'] - 1:
+                innermost = 1
+                    #fname_dir = data_dir(run_num-(kwargs['nzones']-2))
+                    #fname = glob.glob(fname_dir+"/*final.rhdf")[0]
+            else:
+                args['coordinates/r_out'] = last_r_out * kwargs['base']
+                args['coordinates/r_in'] = last_r_in * kwargs['base']
+
+        # Get filename to fill in the rest that fname doesn't cover
+        if run_num  < kwargs['nzones']:
+            fname_fill_dir = data_dir(0)
+        else:
+            # TODO explain why this number is correct
+            if kwargs['in2out'] or kwargs['out2in']:
+                ghost_cell_idx = run_num - kwargs['nzones'] + 3 
+                if innermost: fname = glob.glob(data_dir(ghost_cell_idx)+"/*final.rhdf")[0] # for the ghost cell initialziation at r_out
+                #if innermost or outermost:
+                fname_fill_dir = data_dir(ghost_cell_idx - innermost)
+                #else:
+                    #fname_fill_dir = data_dir(run_num)
+                fname_fill2_dir = data_dir(ghost_cell_idx - 1 - innermost)
+                fname_fill2 = glob.glob(fname_fill2_dir+"/*final.rhdf")[0]
+                if outermost:
+                    fname_fill_dir = data_dir(run_num - kwargs['nzones'] + 1)
+                    fname_fill2 = 'none'
+            else:
+                fname_fill_dir = data_dir(1 + 2 * (iteration - 1) * (kwargs['nzones'] - 1) - (run_num))
+        fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
+        args['resize_restart/fname_fill1'] = fname_fill
+    else:
+        if kwargs['in2out']:
+            args['coordinates/r_out'] = kwargs['base']**2
+            args['coordinates/r_in'] = 1
+        elif kwargs['out2in']:
+            args['coordinates/r_out'] = kwargs['base']**(kwargs['nzones'] + 1)
+            args['coordinates/r_in'] = args['coordinates/r_out'] / kwargs['base']**2
+        else:
+            args['coordinates/r_in'] = last_r_out / np.power(kwargs['base'],2.)#np.exp(np.log(last_r_out) / 4. * 3) # 4.
+        args['parthenon/mesh/nx1'] = args['parthenon/mesh/nx2'] #args['parthenon/mesh/nx1'] // 4  #* 3
+        args['parthenon/meshblock/nx1'] = args['parthenon/mesh/nx1']
+        args['resize_restart/fname_fill1'] = "none"
+    #if args['coordinates/r_out'] > 1e8:
+        #args['b_cleanup/rel_tolerance'] = 1e-5
+    #else:
+    args['b_cleanup/rel_tolerance'] = 1e-1 #1e-2 #
+    args['b_cleanup/use_normalized_divb'] = 0 #
 
     # Choose timestep and radii for the next run: smaller/larger as we step in/out
     args['parthenon/time/dt'] = max(dt_last * kwargs['base']**(-3./2.*out_to_in) / 4, 1e-5)
@@ -299,13 +369,35 @@ def update_args(run_num, kwargs, args):
     #fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
     args['resize_restart/fname'] = fname
     # make all the fill files none
-    args['resize_restart/fname_fill1'] = "none"
-    args['resize_restart/fname_fill2'] = "none"
+    args['resize_restart/fname_fill2'] = fname_fill2
     args['resize_restart/fname_fill3'] = "none"
     args['resize_restart/fname_fill4'] = "none"
     args['resize_restart/fname_fill5'] = "none"
     args['resize_restart/fname_fill6'] = "none"
     args['resize_restart/fname_fill7'] = "none"
+
+    if run_num >= kwargs['nruns'] - 1:
+        # final whole grid cleanup
+        num_fills = run_num - kwargs['nruns'] + 2
+        #if num_fills == 1:
+        #    fname_dir = data_dir(kwargs['nruns'] - kwargs['nzones']])
+        #else:
+        #    fname_dir = data_dir(run_num)
+        #fname=glob.glob(fname_dir+"/*final.rhdf")[0]
+        #args['resize_restart/fname'] = fname
+        #fname_fill_dir = data_dir(run_num - kwargs['nzones'] + 1)
+        #fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
+        #for fn in range(num_fills-1):#kwargs['nzones']-1):
+        #    fn_dir = data_dir(run_num - (fn+1))
+        #    fname_fill = glob.glob(fn_dir+"/*final.rhdf")[0]
+        #    args['resize_restart/fname_fill{}'.format(fn+1)] = fname_fill
+
+        args['parthenon/mesh/nx1'] = int((kwargs['nx1']/2.)*(num_fills+1))
+        args['parthenon/meshblock/nx1'] = args['parthenon/mesh/nx1'] #kwargs['nx1_mb']
+        #args['coordinates/r_out'] = kwargs['base']**(kwargs['nzones'] + 1)
+        args['coordinates/r_in'] = 1
+        #args['b_cleanup/use_normalized_divb'] = 0 #
+        #args['b_cleanup/rel_tolerance'] = 0.5 #
 
 if __name__=="__main__":
   run_multizone()

@@ -104,6 +104,10 @@ KOKKOS_INLINE_FUNCTION Real linear_interp_kharma(GReal del[GR_DIM], const hsize_
     // In X2, do the same
     if (j > length[2] - 2) { jtemp = length[2] - 2; del[2] = 1; }
     // k auto-wraps. So do all indices for periodic boxes.
+    for (int vtemp = 1; vtemp < 4; vtemp++) {
+      if (m::abs(del[vtemp]) < 1.e-8) del[vtemp] = 0;
+      //else printf("del[%d] is %g\n",vtemp,del[vtemp]);
+    }
 
     // interpolate in x1 and x2
     interp = var(v, iblock, k, jtemp    , itemp    )*(1. - del[1])*(1. - del[2]) +
