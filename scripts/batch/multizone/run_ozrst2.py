@@ -98,11 +98,29 @@ def run_multizone(**kwargs):
         # First run arguments
         base = kwargs['base']
         args = {}
-        args['parthenon/job/problem_id'] = "bondi"
+        args['parthenon/job/problem_id'] = "resize_restart_kharma"
         args['resize_restart/base'] = base
         args['resize_restart/nzone'] = kwargs['nzones']
         args['resize_restart/iteration'] = 1
         kwargs['start_run'] = 0
+        fn_dir = "../072423_rst_clean_frm_32_2" #"../071023_beta01" #"../072023_test_to_rst_frm" #
+        fname_num = 8 #7 #
+        fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
+        fname_fill1 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
+        fname_fill2 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-2))[0]
+        fname_fill3 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-3))[0]
+        fname_fill4 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-4))[0]
+        fname_fill5 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-5))[0]
+        fname_fill6 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-6))[0]
+        fname_fill7 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-7))[0]
+        args['resize_restart/fname'] = fname
+        args['resize_restart/fname_fill1'] = fname_fill1
+        args['resize_restart/fname_fill2'] = fname_fill2
+        args['resize_restart/fname_fill3'] = fname_fill3
+        args['resize_restart/fname_fill4'] = fname_fill4
+        args['resize_restart/fname_fill5'] = fname_fill5
+        args['resize_restart/fname_fill6'] = fname_fill6
+        args['resize_restart/fname_fill7'] = fname_fill7
 
         turn_around = kwargs['nzones'] - 1
         args['coordinates/r_out'] = base**(turn_around+2)
@@ -201,7 +219,7 @@ def run_multizone(**kwargs):
             runtime = float(kwargs['tlim'])
 
         tlim = kwargs['start_time'] + runtime
-        tlim_max = 500.*np.power(r_b,3./2.)
+        tlim_max = 600.*np.power(r_b,3./2.)
         if tlim > tlim_max:
             stop = True
         args['parthenon/time/tlim'] = tlim #min(kwargs['start_time'] + runtime,10.*np.power(r_b,3./2))
@@ -295,13 +313,23 @@ def update_args(run_num, kwargs, args):
 
     # Get filename to fill in the rest that fname doesn't cover
     if run_num + 1 < kwargs['nzones']:
-        fname_fill = "none"
+        if run_num == 0:
+            args['resize_restart/fname_fill1'] = args['resize_restart/fname']
+        else:
+            args['resize_restart/fname_fill1'] = args['resize_restart/fname_fill1']
     else:
         # TODO explain why this number is correct
         fname_fill_dir = data_dir(2 * (iteration - 1) * (kwargs['nzones'] - 1) - (run_num + 1))
         fname_fill = glob.glob(fname_fill_dir+"/*final.rhdf")[0]
+        args['resize_restart/fname_fill1'] = fname_fill
     args['resize_restart/fname'] = fname
-    args['resize_restart/fname_fill'] = fname_fill
+    # make all the fill files none
+    args['resize_restart/fname_fill2'] = "none"
+    args['resize_restart/fname_fill3'] = "none"
+    args['resize_restart/fname_fill4'] = "none"
+    args['resize_restart/fname_fill5'] = "none"
+    args['resize_restart/fname_fill6'] = "none"
+    args['resize_restart/fname_fill7'] = "none"
 
 if __name__=="__main__":
   run_multizone()
