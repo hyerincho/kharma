@@ -103,7 +103,7 @@ def run_multizone(**kwargs):
         args['resize_restart/nzone'] = kwargs['nzones']
         args['resize_restart/iteration'] = 1
         kwargs['start_run'] = 0
-        fn_dir = "../072423_rst_clean_frm_32_2" #"../071023_beta01" #"../072023_test_to_rst_frm" #
+        fn_dir = "../080623_rst_clean_frm_32" #"../072423_rst_clean_frm_32_2" #"../071023_beta01" #"../072023_test_to_rst_frm" #
         fname_num = 8 #7 #
         fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
         fname_fill1 = "none" # glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
@@ -133,22 +133,23 @@ def run_multizone(**kwargs):
 
         # bondi & vacuum parameters
         # TODO derive these from r_b or gizmo
-        if kwargs['nzones'] == 3 or kwargs['nzones'] == 6:
-            kwargs['r_b'] = 256
-            logrho = -4.13354231
-            log_u_over_rho = -2.57960521
-        elif kwargs['nzones'] == 4:
-            kwargs['r_b'] = 256
-            logrho = -4.200592800419657
-            log_u_over_rho = -2.62430556
-        elif kwargs['gizmo']:
-            kwargs['r_b'] = 1e5
-            logrho = -7.80243572
-            log_u_over_rho = -5.34068635
-        else:
-            kwargs['r_b'] = 1e5
-            logrho = -8.2014518
-            log_u_over_rho = -5.2915149
+        #if kwargs['nzones'] == 3 or kwargs['nzones'] == 6:
+        #    kwargs['r_b'] = 256
+        #    logrho = -4.13354231
+        #    log_u_over_rho = -2.57960521
+        #elif kwargs['nzones'] == 4:
+        #    kwargs['r_b'] = 256
+        #    logrho = -4.200592800419657
+        #    log_u_over_rho = -2.62430556
+        #elif kwargs['gizmo']:
+        #    kwargs['r_b'] = 1e5
+        #    logrho = -7.80243572
+        #    log_u_over_rho = -5.34068635
+        #else:
+        kwargs['r_b'] = 1e5
+        logrho = -8.2014518
+        log_u_over_rho = -5.2915149
+
         args['bondi/vacuum_logrho'] = logrho
         args['bondi/vacuum_log_u_over_rho'] = log_u_over_rho
         args['bondi/rs'] = np.sqrt(float(kwargs['r_b']))
@@ -160,7 +161,7 @@ def run_multizone(**kwargs):
             args['b_field/solver'] = "flux_ct"
             args['b_field/bz'] = kwargs['bz']
             # Compress coordinates to save time
-            if kwargs['nx1'] >= 128:
+            if 0: #kwargs['nx1'] >= 128:
                 args['coordinates/transform'] = "fmks"
                 args['coordinates/mks_smooth'] = 0.
                 args['coordinates/poly_xt'] = 0.8
@@ -170,12 +171,14 @@ def run_multizone(**kwargs):
                 args['coordinates/hslope'] = 0.3
             # Enable the floors
             args['floors/disable_floors'] = False
+            args['floors/gamma_max'] = 10
             # And modify a bunch of defaults
             # Assume we will always want jitter if we have B unless a 2D problem
             if kwargs['jitter'] == 0.0 and kwargs['nx3']>1 :
                 kwargs['jitter'] = 0.1
             # Lower the cfl condition in B field
             args['GRMHD/cfl'] = 0.5
+            args['GRMHD/reconstruction'] = "weno5"
 
         # Parameters directly from defaults/cmd
         args['perturbation/u_jitter'] = kwargs['jitter']
@@ -225,8 +228,8 @@ def run_multizone(**kwargs):
         args['parthenon/time/tlim'] = tlim #min(kwargs['start_time'] + runtime,10.*np.power(r_b,3./2))
 
         # Output timing (TODO make options)
-        args['parthenon/output0/dt'] = max((runtime/4.), 1e-7)
-        args['parthenon/output1/dt'] = max((runtime/2.), 1e-7)
+        args['parthenon/output0/dt'] = max((runtime/(base/2)), 1e-7)
+        args['parthenon/output1/dt'] = max((runtime/(base/4)), 1e-7)
         args['parthenon/output2/dt'] = runtime/10 #0.
 
         # Start any future run from this point
