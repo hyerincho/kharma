@@ -105,8 +105,8 @@ def run_multizone(**kwargs):
         args['resize_restart/nzone'] = kwargs['nzones']
         args['resize_restart/iteration'] = 1
         kwargs['start_run'] = 0
-        fn_dir = "../071023_beta01" #"../072023_test_to_rst_frm" #
-        fname_num = 47341 #7 #
+        fn_dir = "../072723_weno_g10" #"../071023_beta01" #"../072023_test_to_rst_frm" #
+        fname_num = 31549 #47341 #
         fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
         fname_fill1 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
         fname_fill2 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-2))[0]
@@ -171,6 +171,8 @@ def run_multizone(**kwargs):
             args['coordinates/hslope'] = 0.3
             # Enable the floors
             args['floors/disable_floors'] = False
+            args['floors/gamma_max'] = 10
+            args['GRMHD/reconstruction'] = "weno5"
             # And modify a bunch of defaults
             # Assume we will always want jitter if we have B unless a 2D problem
             if kwargs['jitter'] == 0.0 and kwargs['nx3']>1 :
