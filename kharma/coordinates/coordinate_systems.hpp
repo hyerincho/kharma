@@ -125,8 +125,8 @@ class SphKSCoords {
             const GReal rho2 = r*r + a*a*cos2;
             
             // (Hyerin 11/13/22) test
-            const GReal A = 1.46797639*m::pow(10.,-8);
-            const GReal B = 1.29411117;
+            const GReal A = 4.24621057 * m::pow(10.,-9); //1.46797639*m::pow(10.,-8);
+            const GReal B = 1.35721335; //1.29411117;
             const GReal Phi_g = (A/(B-1.)) * (m::pow(r,B-1.)-m::pow(2,B-1.));
 
             gcov[0][0] = -1. + 2.*r/rho2;
@@ -170,8 +170,8 @@ class SphKSCoords {
             trans[3][1] = a/(r*r - 2.*r + a*a);
 
             // external gravity from GIZMO
-            const GReal A = 1.46797639*m::pow(10.,-8);
-            const GReal B = 1.29411117;
+            const GReal A = 4.24621057 * m::pow(10.,-9); //1.46797639*m::pow(10.,-8);
+            const GReal B = 1.35721335; //1.29411117;
             const GReal Phi_g = (A/(B-1.)) * (m::pow(r,B-1.)-m::pow(2,B-1.));
 
             if (ext_g) {
@@ -191,8 +191,8 @@ class SphKSCoords {
             rtrans[3][1] = a/(r*r - 2.*r + a*a);
 
             // external gravity from GIZMO
-            const GReal A = 1.46797639*m::pow(10.,-8);
-            const GReal B = 1.29411117;
+            const GReal A = 4.24621057 * m::pow(10.,-9); //1.46797639*m::pow(10.,-8);
+            const GReal B = 1.35721335; //1.29411117;
             const GReal Phi_g = (A/(B-1.)) * (m::pow(r,B-1.)-m::pow(2,B-1.));
             
             if (ext_g) {
@@ -236,8 +236,8 @@ class SphBLCoords {
             const GReal mmu = 1. + a2*cth*cth/r2; // mu is taken as an index
 
             // (Hyerin 11/13/22) test
-            const GReal A = 1.46797639*m::pow(10.,-8);
-            const GReal B = 1.29411117;
+            const GReal A = 4.24621057 * m::pow(10.,-9); //1.46797639*m::pow(10.,-8);
+            const GReal B = 1.35721335; //1.29411117;
             const GReal Phi_g = (A/(B-1.)) * (m::pow(r,B-1.)-m::pow(2,B-1.));
 
             gzero2(gcov);
@@ -560,15 +560,16 @@ class FunkyTransform {
  */
 class WidepoleTransform {
     public:
-        const GReal lin_frac, n2;
+        const GReal lin_frac, n2, n3;
         GReal smoothness;
 
         // Constructor
-        KOKKOS_FUNCTION WidepoleTransform(GReal lin_frac_in, GReal n2_in): lin_frac(lin_frac_in), n2(n2_in) 
+        KOKKOS_FUNCTION WidepoleTransform(GReal lin_frac_in, GReal n2_in, GReal n3_in): lin_frac(lin_frac_in), n2(n2_in), n3(n3_in) 
         {
-            if (lin_frac < 1. / (1. / M_PI - 1./ n2 + 1.)) smoothness = -1. / (2. * n2 * log(1. - lin_frac / (1. - lin_frac) * (1. / M_PI - 1. / n2)));
+            GReal temp = lin_frac / (1. - lin_frac) * (1. / M_PI - 1. / n3) * n3 / n2;
+            if (abs(temp) < 1) smoothness = 1. / (n2 * log((1. + temp) / (1. - temp)));
             else {
-                printf("WARNING: It is harder to have del phi ~ del th. Try using lin_frac < %g \n",  1./ (1. / M_PI - 1./ n2 + 1.));
+                printf("WARNING: It is harder to have del phi ~ del th. Try using lin_frac < %g \n",  1./ ((1. / M_PI - 1./ n3) * n3 / n2 + 1.));
                 smoothness = 0.8 / n2;
             }
         }
@@ -579,7 +580,8 @@ class WidepoleTransform {
             Xembed[0] = Xnative[0];
             Xembed[1] = exp(Xnative[1]);
             GReal th;
-            th = M_PI / 2. * (1. + 2. * lin_frac * (Xnative[2] - 0.5) + (1. - lin_frac) * exp((Xnative[2] - 1.) / smoothness) - (1. - lin_frac) * exp(-Xnative[2] / smoothness));
+            //th = M_PI / 2. * (1. + 2. * lin_frac * (Xnative[2] - 0.5) + (1. - lin_frac) * exp((Xnative[2] - 1.) / smoothness) - (1. - lin_frac) * exp(-Xnative[2] / smoothness));
+            th = M_PI / 2. * (1. + 2. * lin_frac * (Xnative[2] - 0.5) + (1. - lin_frac) * (tanh((Xnative[2] - 1.) / smoothness) + 1.) - (1. - lin_frac) * (tanh(-Xnative[2] / smoothness) + 1.));
             Xembed[2] = excise(excise(th, 0.0, SMALL), M_PI, SMALL);
             Xembed[3] = Xnative[3];
         }
@@ -599,7 +601,8 @@ class WidepoleTransform {
             gzero2(dxdX);
             dxdX[0][0] = 1.;
             dxdX[1][1] = exp(Xnative[1]);
-            dxdX[2][2] = M_PI / 2. * (2. * lin_frac + (1. - lin_frac) / smoothness * exp((Xnative[2] - 1.) / smoothness) + (1. - lin_frac) / smoothness * exp(-Xnative[2] / smoothness));
+            //dxdX[2][2] = M_PI / 2. * (2. * lin_frac + (1. - lin_frac) / smoothness * exp((Xnative[2] - 1.) / smoothness) + (1. - lin_frac) / smoothness * exp(-Xnative[2] / smoothness));
+            dxdX[2][2] = M_PI / 2. * (2. * lin_frac + (1. - lin_frac) / (smoothness * m::pow(cosh((Xnative[2] - 1.) / smoothness), 2.)) + (1. - lin_frac) / (smoothness * m::pow(cosh(Xnative[2] / smoothness),2.)));
             dxdX[3][3] = 1.;
         }
         /**
