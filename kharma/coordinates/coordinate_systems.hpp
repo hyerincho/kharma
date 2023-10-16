@@ -568,12 +568,16 @@ class WidepoleTransform {
         {
             GReal n3_temp = n3;
             if (n3 < M_PI) n3_temp = n2;
-            GReal temp = lin_frac / (1. - lin_frac) * (1. / M_PI - 1. / n3_temp) * n3_temp / n2;
+            GReal temp;
+            if (lin_frac == 1) temp = 1.;
+            else temp = lin_frac / (1. - lin_frac) * (1. / M_PI - 1. / n3_temp) * n3_temp / n2;
             if (abs(temp) < 1) smoothness = 1. / (n2 * log((1. + temp) / (1. - temp)));
             else {
                 printf("WARNING: It is harder to have del phi ~ del th. Try using lin_frac < %g \n",  1./ ((1. / M_PI - 1./ n3_temp) * n3_temp / n2 + 1.));
                 smoothness = 0.8 / n2;
             }
+            smoothness = m::max(0.01, smoothness); // fix it for now for test
+            printf("temp %g, smoothness %g\n",temp, smoothness);
         }
 
         // Coordinate transformations
