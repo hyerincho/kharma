@@ -155,7 +155,6 @@ KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, cons
             //u_temp = u(iblocktemp,ktemp,jtemp,itemp);
         }
         Real T = get_T(r, C1, C2, n, rs);
-        rho_temp = m::pow(T, n);
         u_temp = rho_temp * T * n;
 
         Real ur = -C1 / (m::pow(T, n) * m::pow(r, 2)) * ur_frac;
