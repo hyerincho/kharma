@@ -129,6 +129,14 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
         if (m::abs(n-1.5) < 0.01) rb = rs * rs * 80. / (27. * gam);
         else rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
         break;
+    case BSeedType::r32s2:
+        bz = pin->GetOrAddReal("b_field", "bz", 0.);
+        gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
+        n = 1. / (gam - 1.);
+        rs = pin->GetOrAddReal("bondi", "rs", m::sqrt(1e5));
+        if (m::abs(n-1.5) < 0.01) rb = rs * rs * 80. / (27. * gam);
+        else rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
+        break;
     case BSeedType::r34s2:
         bz = pin->GetOrAddReal("b_field", "bz", 0.);
         gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
@@ -276,6 +284,12 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
                     //Real q_2 = (bz * rb /2.) * r * m::pow(m::sin(th),2.); // new solution
                     //q = q_1*sw + q_2*(1.-sw);
                     q = bz * (r * r / 2. + r * rb / 2.) * m::pow(m::sin(th),2.); // new solution
+                }
+                break;
+            case BSeedType::r32s2:
+                // Hyerin (10/23/23) a vertical-ish field for constant density initialization
+                {
+                    q = bz / 2. * (r * r + m::pow(r,3./2.) * m::pow(rb,1./2.) / 2.) * m::pow(m::sin(th),2.);
                 }
                 break;
             case BSeedType::r34s2:

@@ -160,6 +160,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
         // just match at the r_shell value Hyerin (12/30/22)
         T = get_T(r_shell, C1, C2, n, rs);
         rho = m::pow(T, n);
+        T = get_T(r, C1, C2, n, rs); // Set the temperature to Bondi
         u = rho * T * n;
     } //else {
     //    ucon_bl[1] = 0.; // 10/23/2022 test zero velocity for the bondi shell

@@ -25,8 +25,8 @@ def format_args(args):
 
 def calc_runtime(r_out, r_b):
     """r/v where v=sqrt(v_ff**2+c_s**2)"""
-    #return r_out/np.sqrt(1./r_out + 1./r_b)
-    return np.power(min(r_out,r_b),3./2)
+    return r_out/np.sqrt(1./r_out + 1./r_b)
+    #return np.power(min(r_out,r_b),3./2)
 
 def data_dir(n):
     """Data directory naming scheme"""
@@ -83,7 +83,6 @@ def calc_nx1(kwargs, r_out=None, r_in=None):#(given_nx1, nzones):
 @click.option('--btype', default="r1s2", help="b field type")
 @click.option('--coord', default=None, help="coordinate system")
 @click.option('--df', is_flag=True, help="Use drift frame instead of normal when applying floors.")
-@click.option('--urfrac', default=0, help="ur_frac")
 def run_multizone(**kwargs):
     """This script runs a "multi-zone" KHARMA sequence.
     The idea is to divide a large domain (~1e8M radius) into several "zones,"
@@ -163,12 +162,12 @@ def run_multizone(**kwargs):
             log_u_over_rho = -5.34068635
         else:
             #kwargs['r_b'] = 1e5
-            logrho = 0 #-8.2014518
+            logrho = -8.2014518
             log_u_over_rho = -5.2915149
         args['bondi/vacuum_logrho'] = logrho
         args['bondi/vacuum_log_u_over_rho'] = log_u_over_rho
         args['bondi/rs'] = kwargs['rs']
-        args['bondi/ur_frac'] = kwargs['urfrac']
+        args['bondi/ur_frac'] = 0
 
         # B field additions
         if kwargs['bz'] != 0.0:
@@ -177,7 +176,10 @@ def run_multizone(**kwargs):
             args['b_field/solver'] = "flux_ct"
             args['b_field/bz'] = kwargs['bz']
             # Compress coordinates to save time
-            if kwargs['nx2'] >= 128 and not kwargs['onezone']:
+            if kwargs['coord'] is not None:
+                args['coordinates/transform'] = kwargs['coord']
+                args['coordinates/lin_frac'] = 0.7
+            elif kwargs['nx2'] >= 128 and not kwargs['onezone']:
                 args['coordinates/transform'] = "fmks"
                 args['coordinates/mks_smooth'] = 0.
                 args['coordinates/poly_xt'] = 0.8
@@ -192,7 +194,7 @@ def run_multizone(**kwargs):
                 args['floors/frame'] = 'drift'
             # And modify a bunch of defaults
             # Assume we will always want jitter if we have B unless a 2D problem
-            if kwargs['jitter'] > 0.0 and kwargs['nx3']>1 : #
+            if kwargs['jitter'] == 0.0 and kwargs['nx3']>1 :
                 kwargs['jitter'] = 0.1
             # Lower the cfl condition in B field
             args['GRMHD/cfl'] = 0.5
@@ -201,13 +203,6 @@ def run_multizone(**kwargs):
             else:
                 # use weno5
                 args['GRMHD/reconstruction'] = "weno5"
-        else:
-            kwargs['jitter'] = 0.0
-        if kwargs['coord'] is not None:
-            args['coordinates/transform'] = kwargs['coord']
-            # TODO these are only for wks
-            args['coordinates/lin_frac'] = 0.75
-            args['GRMHD/reconstruction'] = "linear_vl"
         args['GRMHD/gamma'] = kwargs["gamma"]
         args['floors/rho_min_geom'] = kwargs['rhomin']
         args['floors/u_min_geom'] = kwargs['umin']
@@ -294,7 +289,7 @@ def run_multizone(**kwargs):
         if kwargs['onezone']: tlim = runtime
         if kwargs['tmax'] is None: tlim_max = 500.*np.power(r_b,3./2.) #1200
         else: 
-            tlim_max = float(kwargs['tmax']) * np.power(r_b,3./2.)
+            tlim_max = float(kwargs['tmax']) * np.power(kwargs['base']**(kwargs['nzones'] + 1),3./2.)
             print(tlim_max)
         if tlim > tlim_max:
             stop = True

@@ -147,14 +147,16 @@ KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, cons
         // (02/08/23) instead in order to set the vacuum homogeneous instead of having theta phi dependence, set j and k values
         jtemp = fnghost;
         ktemp = fnghost * (length[3] > 1);
-        if (vacuum_logrho !=0 && vacuum_log_u_over_rho !=0) {
+        if (vacuum_logrho !=0) { //&& vacuum_log_u_over_rho !=0) {
             rho_temp = m::pow(10.,vacuum_logrho);
-            u_temp = m::pow(10.,vacuum_log_u_over_rho) * rho_temp;
+            //u_temp = m::pow(10.,vacuum_log_u_over_rho) * rho_temp;
         } else {
             rho_temp = rho(iblocktemp,ktemp,jtemp,itemp);
-            u_temp = u(iblocktemp,ktemp,jtemp,itemp);
+            //u_temp = u(iblocktemp,ktemp,jtemp,itemp);
         }
         Real T = get_T(r, C1, C2, n, rs);
+        rho_temp = m::pow(T, n);
+        u_temp = rho_temp * T * n;
 
         Real ur = -C1 / (m::pow(T, n) * m::pow(r, 2)) * ur_frac;
         Real ucon_bl[GR_DIM] = {0, ur, 0, 0};
