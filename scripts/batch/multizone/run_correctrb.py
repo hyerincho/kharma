@@ -55,6 +55,7 @@ def calc_nx1(kwargs, r_out=None, r_in=None):#(given_nx1, nzones):
 @click.option('--spin', default=0.0, help="BH spin")
 @click.option('--bz', default=0.0, help="B field Z component. Zero for no field")
 @click.option('--tlim', default=None, help="Enforce a specific tlim for every run (for testing)")
+@click.option('--tmax', default=None, help="Maximum time in units of Bondi time")
 @click.option('--nlim', default=-1, help="Consistent max number of steps for each run")
 #@click.option('--r_b', default=1.e5, help="Bondi radius. None chooses based on nzones")
 @click.option('--rs', default=np.sqrt(1.e5), help="sonic radius. None chooses based on nzones")
@@ -112,9 +113,15 @@ def run_multizone(**kwargs):
         kwargs = {**kwargs, **pickle.load(restart_file)}
         args = pickle.load(restart_file)
         restart_file.close()
-        for arg in kwargs_save.keys():
-            if 'nlim' not in arg: # can change nlim from previous run
-                kwargs[arg] = kwargs_save[arg]
+        if kwargs['onezone']: 
+            # if onezone, just inherit everything from restart.p except nruns
+            kwargs['nruns'] = kwargs_save['nruns']
+            update_args(kwargs['start_run'], kwargs, args)
+            kwargs['start_run'] += 1
+        else:
+            for arg in kwargs_save.keys():
+                if 'nlim' not in arg: # can change nlim from previous run
+                    kwargs[arg] = kwargs_save[arg]
         args['parthenon/time/nlim'] = kwargs['nlim']
     else:
         # First run arguments
@@ -134,7 +141,7 @@ def run_multizone(**kwargs):
             args['coordinates/r_in'] = base**turn_around
         # Initialize half-vacuum, unless it's the first GIZMO run
         if kwargs['gizmo']:
-            args['bondi/r_shell'] = args['coordinates/r_in']
+            args['bondi/r_shell'] = 3e6 #args['coordinates/r_in']
         else:
             args['bondi/r_shell'] = base**(turn_around+2)/2.
 
@@ -151,7 +158,7 @@ def run_multizone(**kwargs):
             log_u_over_rho = -2.62430556
         elif kwargs['gizmo']:
             #kwargs['r_b'] = 1e5
-            logrho = -7.80243572
+            logrho = -8.33399171 #-7.80243572
             log_u_over_rho = -5.34068635
         else:
             #kwargs['r_b'] = 1e5
@@ -160,15 +167,6 @@ def run_multizone(**kwargs):
         args['bondi/vacuum_logrho'] = logrho
         args['bondi/vacuum_log_u_over_rho'] = log_u_over_rho
         args['bondi/rs'] = kwargs['rs']
-        if abs(kwargs['gamma']- 5./3.)<1e-2:
-            # only when gamma=5/3, rb=rs^2
-            #args['bondi/rs'] = np.sqrt(float(kwargs['r_b']))
-            r_b = 80.*float(kwargs['rs'])**2/(27.*kwargs['gamma'])
-            print(r_b)
-        else:
-            n = 1./(kwargs['gamma']-1)
-            args['bondi/rs'] = (2*(n+3)-9)/(4*(n+1))*float(kwargs['r_b'])
-            # TODO! change it to r_b calculation
         args['bondi/ur_frac'] = 0
 
         # B field additions
@@ -178,10 +176,7 @@ def run_multizone(**kwargs):
             args['b_field/solver'] = "flux_ct"
             args['b_field/bz'] = kwargs['bz']
             # Compress coordinates to save time
-            if kwargs['coord'] is not None:
-                args['coordinates/transform'] = kwargs['coord']
-                args['coordinates/th_pole'] = 0.4
-            elif kwargs['nx2'] >= 128 and not kwargs['onezone']:
+            if kwargs['nx2'] >= 128 and not kwargs['onezone']:
                 args['coordinates/transform'] = "fmks"
                 args['coordinates/mks_smooth'] = 0.
                 args['coordinates/poly_xt'] = 0.8
@@ -205,6 +200,11 @@ def run_multizone(**kwargs):
             else:
                 # use weno5
                 args['GRMHD/reconstruction'] = "weno5"
+        if kwargs['coord'] is not None:
+            args['coordinates/transform'] = kwargs['coord']
+            # TODO these are only for wks
+            args['coordinates/lin_frac'] = 0.75
+            args['GRMHD/reconstruction'] = "linear_vl"
         args['GRMHD/gamma'] = kwargs["gamma"]
         args['floors/rho_min_geom'] = kwargs['rhomin']
         args['floors/u_min_geom'] = kwargs['umin']
@@ -220,8 +220,8 @@ def run_multizone(**kwargs):
         # effective nzones (Hyerin 07/27/23)
         if (kwargs['combine_out_ann'] or kwargs['move_rin']) and not kwargs['onezone']:
             # think what's the smallest annulus where the logarithmic middle radius is larger than r_b 
-            # (i.e. 8^n > 1e5 for base=8 r_b=1e5 where n is the nth smallest annulus)
-            kwargs['nzones_eff'] = int(np.ceil(np.log(r_b)/np.log(kwargs['base'])))
+            # (i.e. 8^n > 1e5 for base=8 r_b=1e5 where n is the nth smallest annulus, just approximate r_b ~ rs^2)
+            kwargs['nzones_eff'] = int(np.ceil(np.log(kwargs['rs']**2)/np.log(kwargs['base'])))
             args['coordinates/r_in'] = base**(kwargs['nzones_eff']-1)
             if kwargs['base'] < 2: # this means that the second smallest annulu's r_in is inside the horizon
                 args['coordinates/r_in'] = base**(kwargs['nzones_eff'])
@@ -247,6 +247,15 @@ def run_multizone(**kwargs):
     # Default parameters are in mz_dir
     if kwargs['parfile'] is None:
         kwargs['parfile'] = mz_dir+"/multizone.par"
+    if abs(kwargs['gamma']- 5./3.)<1e-2:
+        # only when gamma=5/3, rb=rs^2
+        #args['bondi/rs'] = np.sqrt(float(kwargs['r_b']))
+        r_b = 80.*float(kwargs['rs'])**2/(27.*kwargs['gamma'])
+        print(r_b)
+    else:
+        n = 1./(kwargs['gamma']-1)
+        args['bondi/rs'] = (2*(n+3)-9)/(4*(n+1))*float(kwargs['r_b'])
+        # TODO! change it to r_b calculation
 
     stop = False
     # Iterate, starting with the default args and updating as we go
@@ -279,7 +288,11 @@ def run_multizone(**kwargs):
             runtime = float(kwargs['tlim'])
 
         tlim = kwargs['start_time'] + runtime
-        tlim_max = 500.*np.power(r_b,3./2.) #1200
+        if kwargs['onezone']: tlim = runtime
+        if kwargs['tmax'] is None: tlim_max = 500.*np.power(r_b,3./2.) #1200
+        else: 
+            tlim_max = float(kwargs['tmax']) * np.power(r_b,3./2.)
+            print(tlim_max)
         if tlim > tlim_max:
             stop = True
         args['parthenon/time/tlim'] = tlim #min(kwargs['start_time'] + runtime,10.*np.power(r_b,3./2))
@@ -339,7 +352,8 @@ def update_args(run_num, kwargs, args):
 
     # Filename to restart from
     fname_dir = data_dir(run_num)
-    fname=glob.glob(fname_dir+"/*final.rhdf")[0]
+    if kwargs['onezone']: fname = sorted(glob.glob(fname_dir+"/*.rhdf"))[-1]
+    else: fname=glob.glob(fname_dir+"/*final.rhdf")[0]
     # Get start_time, ncycle, dt from previous run
     kwargs['start_time'] = pyharm.io.get_dump_time(fname)
     d = pyharm.load_dump(fname)
@@ -365,24 +379,25 @@ def update_args(run_num, kwargs, args):
     #   print("Moving outward:")
 
     # Choose timestep and radii for the next run: smaller/larger as we step in/out
-    args['parthenon/time/dt'] = max(dt_last * kwargs['base']**(-3./2.*out_to_in) / 4, 1e-5)
-    if out_to_in > 0:
-        if not kwargs['move_rin']: args['coordinates/r_out'] = last_r_in * kwargs['base'] #last_r_out / kwargs['base']
-        args['coordinates/r_in'] = last_r_in / kwargs['base']
-    else:
-        if not kwargs['move_rin']: args['coordinates/r_out'] = last_r_out * kwargs['base']
-        args['coordinates/r_in'] = last_r_in * kwargs['base']
-    
-    if kwargs['combine_out_ann'] and args['coordinates/r_in']>= kwargs['base']**(kwargs['nzones_eff']-(kwargs['base']>2)):
-        # if the next simulation is at the largest annulus,
-        # make r_out and nx1 larger
-        # if base < 2, the largest r_in is base^nzones_eff. if not, base^nzones_eff-1
-        args['coordinates/r_out'] = kwargs['base']**(kwargs['nzones']+1)
-        #args['parthenon/mesh/nx1'] = larger_ann_nx1(kwargs['nx1'],kwargs['nzones']-kwargs['nzones_eff']+1)
-    args['parthenon/mesh/nx1'] = calc_nx1(kwargs,args['coordinates/r_out'],args['coordinates/r_in'])
-    #else:
-        #args['parthenon/mesh/nx1'] = kwargs['nx1'] # given nx1
-    args['parthenon/meshblock/nx1'] = args['parthenon/mesh/nx1']
+    if not kwargs['onezone']:
+        args['parthenon/time/dt'] = max(dt_last * kwargs['base']**(-3./2.*out_to_in) / 4, 1e-5)
+        if out_to_in > 0:
+            if not kwargs['move_rin']: args['coordinates/r_out'] = last_r_in * kwargs['base'] #last_r_out / kwargs['base']
+            args['coordinates/r_in'] = last_r_in / kwargs['base']
+        else:
+            if not kwargs['move_rin']: args['coordinates/r_out'] = last_r_out * kwargs['base']
+            args['coordinates/r_in'] = last_r_in * kwargs['base']
+        
+        if kwargs['combine_out_ann'] and args['coordinates/r_in']>= kwargs['base']**(kwargs['nzones_eff']-(kwargs['base']>2)):
+            # if the next simulation is at the largest annulus,
+            # make r_out and nx1 larger
+            # if base < 2, the largest r_in is base^nzones_eff. if not, base^nzones_eff-1
+            args['coordinates/r_out'] = kwargs['base']**(kwargs['nzones']+1)
+            #args['parthenon/mesh/nx1'] = larger_ann_nx1(kwargs['nx1'],kwargs['nzones']-kwargs['nzones_eff']+1)
+        args['parthenon/mesh/nx1'] = calc_nx1(kwargs,args['coordinates/r_out'],args['coordinates/r_in'])
+        #else:
+            #args['parthenon/mesh/nx1'] = kwargs['nx1'] # given nx1
+        args['parthenon/meshblock/nx1'] = args['parthenon/mesh/nx1']
 
 
     # Get filename to fill in the rest that fname doesn't cover

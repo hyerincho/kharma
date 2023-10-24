@@ -577,7 +577,6 @@ class WidepoleTransform {
                 smoothness = 0.8 / n2;
             }
             smoothness = m::max(0.01, smoothness); // fix it for now for test
-            printf("temp %g, smoothness %g\n",temp, smoothness);
         }
 
         // Coordinate transformations
