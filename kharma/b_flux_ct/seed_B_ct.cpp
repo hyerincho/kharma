@@ -287,7 +287,7 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
                 }
                 break;
             case BSeedType::r32s2:
-                // Hyerin (10/23/23) a vertical-ish field for constant density initialization
+                // Hyerin (10/23/23) a vertical-ish field for constant density & T ~ r^-1 initialization
                 {
                     q = bz / 2. * (r * r + m::pow(r,3./2.) * m::pow(rb,1./2.) / 2.) * m::pow(m::sin(th),2.);
                 }
@@ -295,7 +295,7 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
             case BSeedType::r34s2:
                 // Hyerin (06/13/23) a vertical-ish field for Bondi initialization
                 {
-                    q = bz / 2. * (r * r + m::pow(r,3./4.) * m::pow(rb,5./4.)) * m::pow(m::sin(th),2.); // new solution
+                    q = bz / 2. * (r * r + m::pow(r,3./4.) * m::pow(rb,5./4.) / 2.) * m::pow(m::sin(th),2.); // new solution
                 }
                 break;
             case BSeedType::r1gizmo:

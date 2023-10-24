@@ -73,7 +73,7 @@ def calc_nx1(kwargs, r_out=None, r_in=None):#(given_nx1, nzones):
 # Don't use this
 @click.option('--start_time', default=0.0, help="Starting time. Only use if you know what you're doing.")
 @click.option('--onezone', is_flag=True, help="Run onezone instead.")
-@click.option('--lin_recon', is_flag=True, help="Use linear reconstruction instead of weno.")
+@click.option('--recon', default=None, help="reconstruction method.")
 @click.option('--combine_out_ann', is_flag=True, help="Combine outer annuli larger than Bondi radius.")
 @click.option('--move_rin', is_flag=True, help="Move r_in instead of switching btw same sized annuli.")
 @click.option('--gamma_max', default=10, help="Gamma_max floor.")
@@ -196,9 +196,7 @@ def run_multizone(**kwargs):
                 kwargs['jitter'] = 0.1
             # Lower the cfl condition in B field
             args['GRMHD/cfl'] = 0.5
-            if kwargs['lin_recon']:
-                args['GRMHD/reconstruction'] = "linear_vl"
-            else:
+            if kwargs['recon'] is None:
                 # use weno5
                 args['GRMHD/reconstruction'] = "weno5"
         else:
@@ -208,6 +206,7 @@ def run_multizone(**kwargs):
             # TODO these are only for wks
             args['coordinates/lin_frac'] = 0.75
             args['GRMHD/reconstruction'] = "linear_vl"
+        if kwargs['recon'] is not None: args['GRMHD/reconstruction'] = kwargs['recon']
         args['GRMHD/gamma'] = kwargs["gamma"]
         args['floors/rho_min_geom'] = kwargs['rhomin']
         args['floors/u_min_geom'] = kwargs['umin']
