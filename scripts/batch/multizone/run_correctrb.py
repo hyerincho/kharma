@@ -199,12 +199,13 @@ def run_multizone(**kwargs):
             if kwargs['recon'] is None:
                 # use weno5
                 args['GRMHD/reconstruction'] = "weno5"
-        else:
-            kwargs['jitter'] = 0.0
+        #else:
+            #kwargs['jitter'] = 0.0
         if kwargs['coord'] is not None:
             args['coordinates/transform'] = kwargs['coord']
             # TODO these are only for wks
-            args['coordinates/lin_frac'] = 0.75
+            args['coordinates/lin_frac'] = 0.6 #0.75
+            args['coordinates/smoothness'] = 0.02
             args['GRMHD/reconstruction'] = "linear_vl"
         if kwargs['recon'] is not None: args['GRMHD/reconstruction'] = kwargs['recon']
         args['GRMHD/gamma'] = kwargs["gamma"]
