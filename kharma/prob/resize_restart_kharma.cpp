@@ -408,13 +408,13 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         if (should_fill) { // TODO: here I'm assuming fname and fname_fill has same dimensions, which is not always the case.
             hdf5_open(fname_fill.c_str());
             hdf5_set_directory("/");
-            hdf5_read_array(rho_filefill, "prims.rho", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(u_filefill, "prims.u", 5, fill_fdims, fstart,fill_fdims,fill_fdims,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(uvec_filefill, "prims.uvec", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
-            if (include_B) hdf5_read_array(B_filefill, "cons.B", 5, fill_fdims_vec, fstart,fill_fdims_vec,fill_fdims_vec,fstart,H5T_IEEE_F64LE);
-            hdf5_read_array(x1_filefill, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x,fill_fdims_x1,fill_fdims_x1,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x2_filefill, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x,fill_fdims_x2,fill_fdims_x2,fstart_x,H5T_IEEE_F64LE);
-            hdf5_read_array(x3_filefill, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x,fill_fdims_x3,fill_fdims_x3,fstart_x,H5T_IEEE_F64LE);
+            hdf5_read_array(rho_filefill, "prims.rho", 5, fill_fdims, fstart, fill_fdims, fill_fdims, fstart, H5T_IEEE_F64LE);
+            hdf5_read_array(u_filefill, "prims.u", 5, fill_fdims, fstart, fill_fdims, fill_fdims, fstart, H5T_IEEE_F64LE);
+            hdf5_read_array(uvec_filefill, "prims.uvec", 5, fill_fdims_vec, fstart, fill_fdims_vec, fill_fdims_vec, fstart, H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(B_filefill, "cons.B", 5, fill_fdims_vec, fstart, fill_fdims_vec, fill_fdims_vec, fstart, H5T_IEEE_F64LE);
+            hdf5_read_array(x1_filefill, "VolumeLocations/x", 2, fill_fdims_x1, fstart_x, fill_fdims_x1, fill_fdims_x1, fstart_x, H5T_IEEE_F64LE);
+            hdf5_read_array(x2_filefill, "VolumeLocations/y", 2, fill_fdims_x2, fstart_x, fill_fdims_x2, fill_fdims_x2, fstart_x, H5T_IEEE_F64LE);
+            hdf5_read_array(x3_filefill, "VolumeLocations/z", 2, fill_fdims_x3, fstart_x, fill_fdims_x3, fill_fdims_x3, fstart_x, H5T_IEEE_F64LE);
             hdf5_close();
         }
 

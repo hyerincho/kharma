@@ -121,7 +121,7 @@ def run_multizone(**kwargs):
             kwargs['start_run'] += 1
         else:
             for arg in kwargs_save.keys():
-                if 'nlim' not in arg: # can change nlim from previous run
+                if 'nlim' in arg: # can change nlim from previous run
                     kwargs[arg] = kwargs_save[arg]
         args['parthenon/time/nlim'] = kwargs['nlim']
     else:
