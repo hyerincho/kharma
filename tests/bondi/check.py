@@ -30,6 +30,8 @@ for res in RES:
 
     rho0 = np.mean(start['RHO'][imin:,:], axis=1)
     rho1 = np.mean(end['RHO'][imin:,:], axis=1)
+    #rho0 = start['RHO'][imin:,start['n2']//2]
+    #rho1 = end['RHO'][imin:,end['n2']//2]
 
     fig = plt.figure(figsize=(5,5))
     ax = fig.add_subplot(1,1,1)
