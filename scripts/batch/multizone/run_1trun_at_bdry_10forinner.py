@@ -181,7 +181,8 @@ def run_multizone(**kwargs):
             # Compress coordinates to save time
             if kwargs['coord'] is not None:
                 args['coordinates/transform'] = kwargs['coord']
-                args['coordinates/lin_frac'] = 0.7
+                args['coordinates/lin_frac'] = 0.6
+                args['coordinates/smoothness'] = 0.02
             elif kwargs['nx2'] >= 128 and not kwargs['onezone']:
                 args['coordinates/transform'] = "fmks"
                 args['coordinates/mks_smooth'] = 0.
@@ -213,10 +214,6 @@ def run_multizone(**kwargs):
                 args['coordinates/mks_smooth'] = 0.
                 args['coordinates/poly_xt'] = 0.8
                 args['coordinates/poly_alpha'] = 14
-            elif kwargs['coord'] == 'wks':
-                # TODO these are only for wks
-                args['coordinates/lin_frac'] = 0.6 #0.75
-                args['coordinates/smoothness'] = 0.02
         args['GRMHD/gamma'] = kwargs["gamma"]
         args['floors/rho_min_geom'] = kwargs['rhomin']
         args['floors/u_min_geom'] = kwargs['umin']
@@ -279,14 +276,14 @@ def run_multizone(**kwargs):
             # B field runs use half this
             if kwargs['bz'] != 0.0:
                 runtime /= np.power(base,3./2)*2 # half of free-fall time at the log middle radius
-            if args['coordinates/r_out'] >= base**(kwargs['nzones']+1):
+            #if args['coordinates/r_out'] >= base**(kwargs['nzones']+1):
                 # double the runtime for the outermost annulus
-                runtime *= 2 
+            #    runtime *= 2 
             if args['coordinates/r_in']<2:
-                runtime *= 2 # double the runtime for innermost annulus
+                #runtime *= 2 # double the runtime for innermost annulus
                 if kwargs['long_t_in']:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
-                    runtime *= 5 # 5 tff at the log middle radius
+                    runtime *= 10 # 10 tff at the log middle radius
         else:
             runtime = float(kwargs['tlim'])
 
