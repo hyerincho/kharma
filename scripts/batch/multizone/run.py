@@ -179,10 +179,7 @@ def run_multizone(**kwargs):
             args['b_field/solver'] = "flux_ct"
             args['b_field/bz'] = kwargs['bz']
             # Compress coordinates to save time
-            if kwargs['coord'] is not None:
-                args['coordinates/transform'] = kwargs['coord']
-                args['coordinates/lin_frac'] = 0.7
-            elif kwargs['nx2'] >= 128 and not kwargs['onezone']:
+            if kwargs['nx2'] >= 128 and not kwargs['onezone']:
                 args['coordinates/transform'] = "fmks"
                 args['coordinates/mks_smooth'] = 0.
                 args['coordinates/poly_xt'] = 0.8
@@ -283,10 +280,13 @@ def run_multizone(**kwargs):
                 # double the runtime for the outermost annulus
                 runtime *= 2 
             if args['coordinates/r_in']<2:
+                args['bounds/check_inflow_inner'] = 1
                 runtime *= 2 # double the runtime for innermost annulus
                 if kwargs['long_t_in']:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
                     runtime *= 5 # 5 tff at the log middle radius
+            else:
+                args['bounds/check_inflow_inner'] = 0
         else:
             runtime = float(kwargs['tlim'])
 

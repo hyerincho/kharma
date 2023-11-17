@@ -280,10 +280,13 @@ def run_multizone(**kwargs):
                 # double the runtime for the outermost annulus
             #    runtime *= 2 
             if args['coordinates/r_in']<2:
+                args['bounds/check_inflow_inner'] = 1
                 #runtime *= 2 # double the runtime for innermost annulus
                 if kwargs['long_t_in']:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
                     runtime *= 10 # 10 tff at the log middle radius
+            else:
+                args['bounds/check_inflow_inner'] = 0
         else:
             runtime = float(kwargs['tlim'])
 

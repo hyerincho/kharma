@@ -20,6 +20,7 @@ if [[ "$ARGS" == *"rocky"* ]]; then
       #module load ucx/1.14.1-fasrc02
       MPI_NUM_PROCS=4
       MPI_EXE="srun" #"mpirun" #
+      MPI_EXTRA_ARGS="--mpi=pmix"
       #export KOKKOS_NUM_DEVICES=4
     #else
       #module load gcc/10.2.0-fasrc01 openmpi/4.1.0-fasrc01 cmake/3.25.2-fasrc01
@@ -28,7 +29,6 @@ if [[ "$ARGS" == *"rocky"* ]]; then
     
     export MPICH_GPU_SUPPORT_ENABLED=1
     #module load intel/23.0.0-fasrc01 openmpi/4.1.4-fasrc01 cmake/3.25.2-fasrc01
-    #MPI_EXTRA_ARGS="--map-by ppr:4:node:pe=16"
 
     #source /n/holylfs05/LABS/bhi/Users/hyerincho/grmhd/spack/share/spack/setup-env.sh
     #spack clean -m
@@ -46,6 +46,7 @@ if [[ "$ARGS" == *"rocky"* ]]; then
     fi
     module list
 elif [[ $(hostname -f) == *"rc.fas.harvard.edu" ]]; then
+    # This is an outdated version before updating to Rocky 8
     echo CANNON
     HOST_ARCH=HSW
     EXTRA_FLAGS="-DPARTHENON_DISABLE_HDF5_COMPRESSION=ON"
