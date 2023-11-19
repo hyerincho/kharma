@@ -76,6 +76,7 @@ def calc_nx1(kwargs, r_out=None, r_in=None):#(given_nx1, nzones):
 @click.option('--combine_out_ann', is_flag=True, help="Combine outer annuli larger than Bondi radius.")
 @click.option('--move_rin', is_flag=True, help="Move r_in instead of switching btw same sized annuli.")
 @click.option('--gamma_max', default=10, help="Gamma_max floor.")
+@click.option('--use_r_gamma_max', is_flag=True, help="Use radius dependent gamma_max instead of constant gamma_max.")
 @click.option('--gamma', default=5./3, help="adiabatic index.")
 @click.option('--rhomin', default=1e-6, help="rho min geom.")
 @click.option('--umin', default=1e-8, help="u min geom.")
@@ -194,6 +195,8 @@ def run_multizone(**kwargs):
             # Enable the floors
             args['floors/disable_floors'] = False
             args['floors/gamma_max'] = kwargs['gamma_max']
+            if kwargs['use_r_gamma_max']:
+                args['floors/use_r_gamma_max'] = True
             if kwargs['df']:
                 args['floors/frame'] = 'drift'
             # And modify a bunch of defaults

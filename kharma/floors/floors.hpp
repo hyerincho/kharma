@@ -106,10 +106,10 @@ class Prescription {
         // Limit entropy
         double ktot_max;
         // Limit fluid Lorentz factor
-        double gamma_max;
+        double gamma_max, rs_bondi;
         // Floor options
         bool fluid_frame, mixed_frame, drift_frame;
-        bool use_r_char, temp_adjust_u, adjust_k;
+        bool use_r_char, temp_adjust_u, adjust_k, use_r_gamma_max;
 
         // Instability limits
         bool enable_emhd_limits;
@@ -126,10 +126,12 @@ class Prescription {
             u_over_rho_max   = params.Get<Real>("u_over_rho_max");
             ktot_max         = params.Get<Real>("ktot_max");
             gamma_max        = params.Get<Real>("gamma_max");
+            rs_bondi         = params.Get<Real>("rs_bondi");
 
             use_r_char    = params.Get<bool>("use_r_char");
             temp_adjust_u = params.Get<bool>("temp_adjust_u");
             adjust_k      = params.Get<bool>("adjust_k");
+            use_r_gamma_max = params.Get<bool>("use_r_gamma_max");
 
             fluid_frame   = params.Get<bool>("fluid_frame");
             mixed_frame   = params.Get<bool>("mixed_frame");
@@ -155,12 +157,29 @@ KOKKOS_INLINE_FUNCTION int apply_ceilings(const GRCoordinates& G, const Variable
     // First apply ceilings:
     // 1. Limit gamma with respect to normal observer
     Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, loc);
+    Real f, V02, cs2, betagamma2_max, betagamma2;
 
-    if (gamma > floors.gamma_max) {
-        fflag |= HIT_FLOOR_GAMMA;
+    if (floors.use_r_gamma_max) {
+        GReal Xembed[GR_DIM];
+        G.coord_embed(k, j, i, Loci::center, Xembed);
+        GReal r = Xembed[1];
+        V02 = m::pow(floors.gamma_max, 2.);
+        cs2 = 27. * gam / (80. * floors.rs_bondi * floors.rs_bondi);
+        betagamma2_max = V02 * (1. / r + cs2);
+        betagamma2 = m::pow(gamma, 2) - 1.;
+        if (betagamma2 > betagamma2_max) {
+            fflag |= HIT_FLOOR_GAMMA;
 
-        Real f = m::sqrt((m::pow(floors.gamma_max, 2) - 1.)/(m::pow(gamma, 2) - 1.));
-        VLOOP P(m_p.U1+v, k, j, i) *= f;
+            f = m::sqrt(betagamma2_max / betagamma2);
+            VLOOP P(m_p.U1+v, k, j, i) *= f;
+        }
+    } else {
+        if (gamma > floors.gamma_max) {
+            fflag |= HIT_FLOOR_GAMMA;
+
+            f = m::sqrt((m::pow(floors.gamma_max, 2) - 1.)/(m::pow(gamma, 2) - 1.));
+            VLOOP P(m_p.U1+v, k, j, i) *= f;
+        }
     }
 
     // 2. Limit the entropy by controlling u, to avoid anomalous cooling from funnel wall

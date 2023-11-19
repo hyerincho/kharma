@@ -97,6 +97,10 @@ std::shared_ptr<StateDescriptor> Initialize(ParameterInput *pin)
     // Limit 
     double gamma_max = pin->GetOrAddReal("floors", "gamma_max", 50.);
     params.Add("gamma_max", gamma_max);
+    bool use_r_gamma_max = pin->GetOrAddReal("floors", "use_r_gamma_max", false); // radial dependent application of gamma_max
+    params.Add("use_r_gamma_max", use_r_gamma_max);
+    double rs_bondi = pin->GetOrAddReal("bondi", "rs", 16);
+    params.Add("rs_bondi", rs_bondi);
 
     // Frame to apply floors: usually we use normal observer frame, but
     // the option exists to use the fluid frame exclusively 'fluid' or outside a
