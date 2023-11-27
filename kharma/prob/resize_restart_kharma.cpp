@@ -124,7 +124,7 @@ void ReadKharmaRestartHeader(std::string fname, ParameterInput *pin)
     tNow = restartReader->GetAttr<Real>("Info", "Time");
     dt = restartReader->GetAttr<Real>("Info", "dt");
     tf = fpinput->GetReal("parthenon/time", "tlim");
-    int ncycle = restartReader->GetAttr<int>("Info", "NCycle");
+    //int ncycle = restartReader->GetAttr<int>("Info", "NCycle");
 
     pin->SetReal("GRMHD", "gamma", gam);
     pin->SetReal("parthenon/time", "start_time", tNow);
@@ -134,7 +134,7 @@ void ReadKharmaRestartHeader(std::string fname, ParameterInput *pin)
     if (use_tf) {
         pin->SetReal("parthenon/time", "tlim", tf);
     }
-    pin->SetInteger("parthenon/time", "ncycle", ncycle);
+    //pin->SetInteger("parthenon/time", "ncycle", ncycle);
     // TODO NSTEP, next tdump/tlog, etc?
 
     GReal a = fpinput->GetReal("coordinates", "a");
