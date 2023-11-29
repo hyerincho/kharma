@@ -170,8 +170,31 @@ KOKKOS_INLINE_FUNCTION int apply_ceilings(const GRCoordinates& G, const Variable
         if (betagamma2 > betagamma2_max) {
             fflag |= HIT_FLOOR_GAMMA;
 
+            FourVectors Dtmp_old, Dtmp_new;
+            Real mhd_old[GR_DIM], mhd_new[GR_DIM];
+            Real FE_old, FE_new; // T^r_t + rho * u^r values
+            Real del_rho; // extra density to add
+
+            // (T^r_t + rho * u^r) old
+            GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_old);
+            Flux::calc_tensor(G, P, m_p, Dtmp_old, gam, k, j, i, 1, mhd_old);
+            FE_old = mhd_old[0] + P(m_p.RHO, k, j, i) * Dtmp_old.ucon[1];
+
             f = m::sqrt(betagamma2_max / betagamma2);
             VLOOP P(m_p.U1+v, k, j, i) *= f;
+            
+            // (T^r_t + rho * u^r) new after changing velocities
+            GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_new);
+            Flux::calc_tensor(G, P, m_p, Dtmp_new, gam, k, j, i, 1, mhd_new);
+            FE_new = mhd_new[0] + P(m_p.RHO, k, j, i) * Dtmp_new.ucon[1];
+            
+            // determine how much rho to add
+            del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1] 
+                                            + betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.));
+            P(m_p.RHO, k, j, i) += del_rho;
+            P(m_p.UU, k, j, i) += del_rho * betagamma2_max / (gam * (gam - 1.));
+
+            //Real gamma_new = GRMHD::lorentz_calc(G, P, m_p, k, j, i, loc);
         }
     } else {
         if (gamma > floors.gamma_max) {

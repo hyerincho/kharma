@@ -285,7 +285,7 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
                 }
                 break;
             case BSeedType::r1gizmo:
-                // Hyerin (10/11/23) a vertical-ish field for GIZMO initialization (rho: r^-1 at r<rb and r^-3/2 at r>rb)
+                // Hyerin (10/11/23) a vertical-ish field for GIZMO initialization (rho~r^-1 T~r^-1 at r<rb and rho~r^-1 and T~r^0 at r>rb)
                 {
                     //q = bz / 2. * (r * m::pow(rb, 1./4.) + m::pow(r, 5./4.)) * m::pow(m::sin(th),2.); //
                     q = bz * (r * m::pow(rb, 1./2.) / 2. + m::pow(r, 3./2.)) * m::pow(m::sin(th),2.); //
