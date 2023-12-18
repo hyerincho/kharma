@@ -121,7 +121,7 @@ def run_multizone(**kwargs):
             kwargs['start_run'] += 1
         else:
             for arg in kwargs_save.keys():
-                if 'nlim' in arg: # can change nlim from previous run
+                if 'nlim' in arg or 'kharma_bin' in arg: # can change nlim, kharma_bin from previous run
                     kwargs[arg] = kwargs_save[arg]
         args['parthenon/time/nlim'] = kwargs['nlim']
     else:
@@ -230,7 +230,7 @@ def run_multizone(**kwargs):
         if (kwargs['combine_out_ann'] or kwargs['move_rin']) and not kwargs['onezone']:
             # think what's the smallest annulus where the logarithmic middle radius is larger than r_b 
             # (i.e. 8^n > 1e5 for base=8 r_b=1e5 where n is the nth smallest annulus, just approximate r_b ~ rs^2)
-            kwargs['nzones_eff'] = int(np.ceil(np.log(kwargs['rs']**2)/np.log(kwargs['base'])))
+            kwargs['nzones_eff'] = int(np.ceil(np.log(float(kwargs['rs'])**2)/np.log(kwargs['base'])))
             args['coordinates/r_in'] = base**(kwargs['nzones_eff']-1)
             if kwargs['base'] < 2: # this means that the second smallest annulu's r_in is inside the horizon
                 args['coordinates/r_in'] = base**(kwargs['nzones_eff'])
@@ -289,10 +289,13 @@ def run_multizone(**kwargs):
                 # double the runtime for the outermost annulus
                 runtime *= 2 
             if args['coordinates/r_in']<2:
+                args['bounds/check_inflow_inner'] = 1
                 runtime *= 2 # double the runtime for innermost annulus
                 if kwargs['long_t_in']:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
                     runtime *= 5 # 5 tff at the log middle radius
+            else:
+                args['bounds/check_inflow_inner'] = 0
         else:
             runtime = float(kwargs['tlim'])
 
