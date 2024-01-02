@@ -105,6 +105,9 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     pkg->AddField("prims.B", m);
     m = Metadata(flags_cons, s_vector);
     pkg->AddField("cons.B", m);
+    // Hyerin (12/19/22)
+    m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::FillGhost, Metadata::Vector});
+    pkg->AddField("B_Save", m);
 
     // EMF on edges.
     std::vector<MetadataFlag> flags_emf = {Metadata::Real, Metadata::Edge, Metadata::Derived, Metadata::OneCopy, Metadata::FillGhost};
