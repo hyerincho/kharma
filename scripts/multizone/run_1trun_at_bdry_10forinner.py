@@ -98,7 +98,7 @@ def run_multizone(**kwargs):
     # We're kept in a script subdirectory in kharma/
     mz_dir = os.path.dirname(os.path.realpath(__file__))
     # parent
-    kharma_dir = mz_dir+"/../../.."
+    kharma_dir = mz_dir+"/../.."
     # Get our name from the working dir
     run_name = os.getcwd().split("/")[-1]
 

@@ -83,6 +83,7 @@ check_inflow_inner_x1 = false
 
 <perturbation>
 # overridden
+jitter_above_rho = 0 # always apply perturbation when u_jitter > 0
 u_jitter=0
 
 <b_field>

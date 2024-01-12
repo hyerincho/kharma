@@ -103,7 +103,8 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // Flags for B fields
     // We always mark conserved B to be sync'd for consistency, since it's strictly required for B_CT/AMR
     std::vector<MetadataFlag> flags_prim = {Metadata::Real, Metadata::Derived, Metadata::GetUserFlag("Primitive"),
-                                            Metadata::Cell, Metadata::GetUserFlag("MHD"), areWeImplicit, Metadata::Vector};
+                                            Metadata::Cell, Metadata::GetUserFlag("MHD"), areWeImplicit, Metadata::Vector,
+                                            Metadata::FillGhost, Metadata::Restart}; // added by Hyerin (12/09/2022) TODO: test dropping these two
     std::vector<MetadataFlag> flags_cons = {Metadata::Real, Metadata::Independent, Metadata::Restart, Metadata::FillGhost, Metadata::WithFluxes, Metadata::Conserved,
                                             Metadata::Cell, Metadata::GetUserFlag("MHD"), areWeImplicit, Metadata::Vector};
 
