@@ -112,7 +112,7 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
 
     // EMF on edges.
     std::vector<MetadataFlag> flags_emf = {Metadata::Real, Metadata::Edge, Metadata::Derived, Metadata::OneCopy, Metadata::FillGhost};
-    m = Metadata(flags_emf, s_vector);
+    m = Metadata(flags_emf);
     pkg->AddField("B_CT.emf", m);
 
     if (ct_scheme != "bs99") {
