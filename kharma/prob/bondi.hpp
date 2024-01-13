@@ -138,7 +138,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
     G.coord(k, j, i, Loci::center, Xnative);
     G.coord_embed(k, j, i, Loci::center, Xembed);
     GReal r = Xembed[1];
-    //GReal th = Xembed[2];
+    GReal th = Xembed[2];
     // Unless we're doing a Schwarzchild problem & comparing solutions,
     // be a little cautious about initializing the Ergosphere zones
     if (ks.a > 0.1 && r < 2) return;
@@ -154,7 +154,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
     if (m::abs(n-1.5) < 0.01) rb = rs * rs * 80. / (27. * gam);
     else rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
     Real rho, u, rho0, T0, u0;
-    T0 = get_T(100*rb, C1, C2, n, rs); //  at some large radius, which is 100 rb
+    T0 = get_T(100 * rb, C1, C2, n, rs); //  at some large radius, which is 100 rb
     rho0 = m::pow(T0, n);
     u0 = rho0 * T0 * n;
 
@@ -163,7 +163,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
     //T = T0 * (r + rb) / r; // use the same analytic temperature solution since T already goes like ~1/r
     u = rho * T * n;
 
-    ucon_bl[3]=uphi*m::pow(r,-3./2.); // (04/13/23) a fraction of the kepler //*m::sin(th); // 04/04/23 set it to some small angular velocity. smallest at the poles
+    ucon_bl[3] = uphi * m::pow(r * m::sin(th),-3./2.); // (04/13/23) a fraction of the kepler //*m::sin(th); // 04/04/23 set it to some small angular velocity. smallest at the poles
     Real gcov_bl[GR_DIM][GR_DIM];
     bl.gcov_embed(Xembed, gcov_bl);
     set_ut(gcov_bl, ucon_bl);
@@ -189,7 +189,7 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo(const GReal XG[GR_DIM],
                                     const GridScalar& rarr, const int length, int& i, GReal& del)
 {
     Real dx2, dx2_min;
-    dx2_min=m::pow(XG[1]-rarr(0),2); //100000.; //arbitrarily large number
+    dx2_min = m::pow(XG[1]-rarr(0),2); //100000.; //arbitrarily large number
 
     i = 0; // initialize
 
@@ -217,7 +217,7 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo(const GReal XG[GR_DIM],
  */
 KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P, const VarMap& m_p,
                                            const Real& gam, const SphBLCoords& bl,  const SphKSCoords& ks, 
-                                           const Real r_shell, const Real rs, Real vacuum_logrho, Real vacuum_log_u_over_rho,
+                                           const Real r_shell, const Real ur_frac, const Real uphi, const Real rs, Real vacuum_logrho, Real vacuum_log_u_over_rho,
                                            const GridScalar& rarr, const GridScalar& rhoarr, const GridScalar& Tarr, const GridScalar& vrarr, const int length,
                                            const int& k, const int& j, const int& i)
 {
@@ -231,8 +231,8 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const C
     Real C1 = uc * pow(rs, 2) * pow(Tc, n);
     Real C2 = pow(1. + (1. + n) * Tc, 2) * (1. - 2. * mdot / rs + pow(C1, 2) / (pow(rs, 4) * pow(Tc, 2 * n)));
 
-    Real smallrho=pow(10.,vacuum_logrho); // pow(10.,-4.);
-    Real smallu = smallrho*pow(10.,vacuum_log_u_over_rho);
+    Real smallrho = pow(10., vacuum_logrho); // pow(10.,-4.);
+    Real smallu = smallrho * pow(10., vacuum_log_u_over_rho);
 
     //Real T = smallu/(smallrho*n);
 
@@ -241,6 +241,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const C
     G.coord(k, j, i, Loci::center, Xnative);
     G.coord_embed(k, j, i, Loci::center, Xembed);
     GReal r = Xembed[1];
+    GReal th = Xembed[2];
 
     Real rho, u;
     int itemp;
@@ -252,23 +253,20 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const C
 
     Real T = get_T(r, C1, C2, n, rs);
     Real ur = -C1 / (pow(T, n) * pow(r, 2));
-    //Real ucon_bl[GR_DIM];
-    //ucon_bl[0] = 0.;
-    //ucon_bl[2] = 0.;
-    //ucon_bl[3] = 0.;
     Real ucon_bl[GR_DIM] = {0, 0, 0, 0};
-    if (r<r_shell*0.9){
+    if (r < r_shell * 0.9){
         rho = smallrho;
         u = smallu;
-        ucon_bl[1] = ur;
+        ucon_bl[1] = ur_frac * ur;
+        ucon_bl[3] = uphi * m::pow(r * m::sin(th),-3./2.);
     } else {
         XtoindexGizmo(Xembed, rarr, length, itemp, del);
         // linear interpolation
         if (del < 0 ) { // when r is smaller than GIZMO's range
             del = 0; // just copy over the smallest r values
         }
-        rho = rhoarr(itemp)*(1.-del)+rhoarr(itemp+1)*del;
-        u = rho*(Tarr(itemp)*(1.-del)+Tarr(itemp+1)*del)*n;
+        rho = rhoarr(itemp) * (1. - del) + rhoarr(itemp + 1) * del;
+        u = rho * (Tarr(itemp) * (1. - del) + Tarr(itemp + 1) * del) * n;
         //ucon_bl[1] = 0.; // 10/23/2022 test zero velocity for the bondi shell
     }
 
@@ -294,6 +292,12 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const C
     P(m_p.U3, k, j, i) = u_prim[2];
 }
 
+KOKKOS_INLINE_FUNCTION Real frac_diff(const GReal XG[GR_DIM], const GReal x1, const GReal x2, const GReal x3) {
+    //Real dx2 = m::pow((x1 - XG[1]) / XG[1], 2.) + m::pow((x2 - XG[2]) / M_PI, 2.) + m::pow((x3 - XG[3]) / (2. * M_PI), 2.);
+    Real dx2 = m::pow((x1 - XG[1]), 2.) + m::pow((x2 - XG[2]) / M_PI, 2.) + m::pow((x3 - XG[3]) / (2. * M_PI), 2.);
+    return dx2;
+}
+
 KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
                                     const GridVector& coordarr, const hsize_t length, int& i, GReal& del)
 {
@@ -305,18 +309,21 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
     //Real z = coordarr(0,0)*m::cos(coordarr(0,1));
     //dx2_min=m::pow(XG_cart[0]-x,2)+m::pow(XG_cart[1]-y,2)+m::pow(XG_cart[2]-z,2); 
     //dx2_min=m::pow(coordarr(0,0)/XG[1]-1.,2.)+m::pow((coordarr(0,1)-XG[2])/M_PI,2.)+m::pow((coordarr(0,2)-XG[3])/(2.*M_PI),2.); // sum of fractional diff^2 for each r, th, phi
-    dx2_min=m::pow(coordarr(0,0)-XG[1],2.)+m::pow((coordarr(0,1)-XG[2])/M_PI,2.)+m::pow((coordarr(0,2)-XG[3])/(2.*M_PI),2.); // sum of diff^2 for each r, th, phi
+    //dx2_min=m::pow(coordarr(0,0)-XG[1],2.)+m::pow((coordarr(0,1)-XG[2])/M_PI,2.)+m::pow((coordarr(0,2)-XG[3])/(2.*M_PI),2.); // sum of diff^2 for each r, th, phi
+    dx2_min = frac_diff(XG, coordarr(0,0), coordarr(0,1), coordarr(0,2));
 
     i = 0; // initialize
 
     for (int itemp = 0; itemp < length; itemp++) {
-        if (coordarr(itemp,0) <= XG[1]) { // only look for smaller side
+        //if (coordarr(itemp,0) <= XG[1]) { // only look for smaller side
+        if (m::abs(dx2_min) > 1.0e-8) { // continue if the difference is large
             //x = coordarr(itemp,0)*m::sin(coordarr(itemp,1))*m::cos(coordarr(itemp,2));
             //y = coordarr(itemp,0)*m::sin(coordarr(itemp,1))*m::sin(coordarr(itemp,2));
             //z = coordarr(itemp,0)*m::cos(coordarr(itemp,1));
             //dx2 = m::pow(XG_cart[0]-x,2)+m::pow(XG_cart[1]-y,2)+m::pow(XG_cart[2]-z,2); 
             //dx2 = m::pow(coordarr(itemp,0)/XG[1]-1.,2.)+m::pow((coordarr(itemp,1)-XG[2])/M_PI,2.)+m::pow((coordarr(itemp,2)-XG[3])/(2.*M_PI),2.);
-            dx2 = m::pow(coordarr(itemp,0)-XG[1],2.)+m::pow((coordarr(itemp,1)-XG[2])/M_PI,2.)+m::pow((coordarr(itemp,2)-XG[3])/(2.*M_PI),2.);
+            //dx2 = m::pow(coordarr(itemp,0)-XG[1],2.)+m::pow((coordarr(itemp,1)-XG[2])/M_PI,2.)+m::pow((coordarr(itemp,2)-XG[3])/(2.*M_PI),2.);
+            dx2 = frac_diff(XG, coordarr(itemp, 0), coordarr(itemp, 1), coordarr(itemp, 2));
 
             // simplest interpolation (Hyerin 07/26/22)
             if (dx2<dx2_min){
@@ -327,7 +334,7 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
     }
     
     // No interpolation! Warn if the data points are not exactly on top of each other
-    if (m::abs(dx2_min)>1.e-8) printf("XtoindexGizmo3D: dx2 frac diff large = %g at (r,th,phi)=(%lf %lf %lf) fitted=(%lf %lf %lf) \n",m::sqrt(dx2_min), XG[1], XG[2], XG[3], coordarr(i,0),coordarr(i,1),coordarr(i,2));
+    if (m::abs(dx2_min)>1.e-8) printf("XtoindexGizmo3D: dx2 frac diff large = %g at (r,th,phi)=(%lf %lf %lf) fitted=(%lf %lf %lf) i = %d \n",m::sqrt(dx2_min), XG[1], XG[2], XG[3], coordarr(i,0),coordarr(i,1),coordarr(i,2), i);
 }
 /**
  * Get the GIZMO output values at a particular zone for 3D GIZMO data
@@ -336,7 +343,7 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
  */
 KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell_3d(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P, const VarMap& m_p,
                                            const Real& gam, const SphBLCoords& bl,  const SphKSCoords& ks, 
-                                           const Real r_shell, const Real rs, Real vacuum_logrho, Real vacuum_log_u_over_rho,
+                                           const Real r_shell, const Real ur_frac, const Real uphi_frac, const Real rs, Real vacuum_logrho, Real vacuum_log_u_over_rho,
                                            const GridVector& coordarr, const GridScalar& rhoarr, const GridScalar& Tarr, const GridVector& varr, const hsize_t length,
                                            const int& k, const int& j, const int& i)
 {
@@ -377,15 +384,16 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell_3d(const GRCoordinates& G, cons
     if (r<r_shell*0.9){
         rho = smallrho;
         u = smallu;
-        ucon_bl[1] = ur;
+        ucon_bl[1] = ur_frac * ur;
+        ucon_bl[3] = uphi_frac * m::pow(r * m::sin(th), -3./2.);
     } else {
         XtoindexGizmo3D(Xembed, coordarr, length, itemp, del);
         // DO NOT INTERPOLATE, it is assumed GIZMO data is right on the grid
         rho = rhoarr(itemp);
-        u = rho*(Tarr(itemp))*n;
-        ur = varr(itemp,0);
-        uth = varr(itemp,1)/r;
-        uphi = varr(itemp,2)/(r*m::sin(th));
+        u = rho * (Tarr(itemp)) * n;
+        ur = varr(itemp, 0);
+        uth = varr(itemp, 1) / r;
+        uphi = varr(itemp, 2) / (r * m::sin(th));
         // Newtonian limit
         ucon_bl[1] = ur;
         ucon_bl[2] = uth;

@@ -190,7 +190,7 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     //    vacuum_log_u_over_rho = log10(vacuum_u_over_rho);
                     //}
                 
-                    get_prim_gizmo_shell(G, cs, P, m_p, gam, bl, ks, r_shell, rs, vacuum_logrho, vacuum_log_u_over_rho, 
+                    get_prim_gizmo_shell(G, cs, P, m_p, gam, bl, ks, r_shell, ur_frac, uphi, rs, vacuum_logrho, vacuum_log_u_over_rho, 
                                           r_device, rho_device, T_device, vr_device, length, k, j, i);
                     // TODO all flux
                     GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u);
@@ -203,7 +203,12 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             // read from hdf5 file
             hdf5_open(datfn.c_str());
             hdf5_set_directory("/");
-            hsize_t length=7372800; // TODO: should be able to be retrieved from the data file
+            hsize_t length;
+            hsize_t* hdf5_dim;
+            hdf5_dim = hdf5_get_attribute_info("PartType0_dimless/Coordinates");
+            //printf("HYERIN: the dimensions are (%d, %d)\n", hdf5_dim[0], hdf5_dim[1]);
+            length = hdf5_dim[0]; //7372800;
+            printf("HYERIN: GIZMO data length is %d \n", length);
             Real *coordarr = new double[length*3];
             Real *rhoarr = new double[length];
             Real *Tarr = new double[length];
@@ -257,7 +262,7 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     //    vacuum_log_u_over_rho = log10(vacuum_u_over_rho);
                     //}
 
-                    get_prim_gizmo_shell_3d(G, cs, P, m_p, gam, bl, ks, r_shell, rs, vacuum_logrho, vacuum_log_u_over_rho, 
+                    get_prim_gizmo_shell_3d(G, cs, P, m_p, gam, bl, ks, r_shell, ur_frac, uphi, rs, vacuum_logrho, vacuum_log_u_over_rho, 
                                           coord_device, rho_device, T_device, v_device, length, k, j, i);
                     // TODO all flux
                     GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u);

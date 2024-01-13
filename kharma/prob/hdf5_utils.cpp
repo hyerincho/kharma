@@ -413,3 +413,37 @@ int hdf5_read_array(void *data, const char *name, size_t rank,
 
   return 0;
 }
+
+// (01/12/24) Hyerin: similar to kharma_next Parthenon's outputs/parthenon_hdf5.cpp
+hsize_t* hdf5_get_attribute_info(const char *name) { //, hsize_t dims[2]) {
+  // Open the dataset
+  hid_t dataspace_id;
+  char path[STRLEN];
+  strncpy(path, hdf5_cur_dir, STRLEN);
+  strncat(path, name, STRLEN - strlen(path));
+
+  if(DEBUG) fprintf(stderr,"Reading arr %s\n", path);
+
+  hid_t dset_id = H5Dopen(file_id, path, H5P_DEFAULT);
+  if(dset_id < 0){
+    printf("ERROR: Could not open the data field %s\n",name);
+  }
+
+  // Get attribute shape
+  dataspace_id = H5Dget_space(dset_id);
+  int rank = H5Sget_simple_extent_ndims(dataspace_id);
+  std::size_t size = 1;
+  static hsize_t dims[10] = {0};
+  if (rank > 0) {
+    H5Sget_simple_extent_dims(dataspace_id, dims, NULL);
+    for (int d = 0; d < rank; ++d) {
+      size *= dims[d];
+    }
+    if (size == 0) {
+      printf("ERROR Attribute %s has no value\n", name);
+    }
+  } else { // scalar quantity
+    dims[0] = 1;
+  }
+  return dims;
+}
