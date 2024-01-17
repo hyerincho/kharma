@@ -107,7 +107,7 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     pkg->AddField("cons.B", m);
     if (packages->Get("Globals")->Param<std::string>("problem") == "resize_restart_kharma") {
         m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::FillGhost, Metadata::Vector});
-        pkg->AddField("B_Save", m);
+        pkg->AddField("B_Save", m); // TODO (HYERIN): make this face centered
     }
 
     // EMF on edges.
