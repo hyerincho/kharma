@@ -59,6 +59,7 @@ def calc_nx1(kwargs, r_out=None, r_in=None):#(given_nx1, nzones):
 @click.option('--tmax', default=None, help="Maximum time in units of Bondi time")
 @click.option('--nlim', default=float(5e4), help="Consistent max number of steps for each run")
 @click.option('--r_b', default=1.e5, help="Bondi radius. None chooses based on nzones")
+@click.option('--mdot', default=1.0, help="mdot.")
 @click.option('--jitter', default=0.0, help="Proportional jitter to apply to starting state. Default 10% w/B field")
 # Flags and options
 @click.option('--kharma_bin', default="kharma.cuda", help="Name (not path) of KHARMA binary to run")
@@ -83,6 +84,7 @@ def calc_nx1(kwargs, r_out=None, r_in=None):#(given_nx1, nzones):
 @click.option('--btype', default="r1s2", help="b field type")
 @click.option('--coord', default=None, help="coordinate system")
 @click.option('--df', is_flag=True, help="Use drift frame instead of normal when applying floors.")
+@click.option('--urfrac', default=0, help="ur_frac")
 def run_multizone(**kwargs):
     """This script runs a "multi-zone" KHARMA sequence.
     The idea is to divide a large domain (~1e8M radius) into several "zones,"
@@ -97,7 +99,7 @@ def run_multizone(**kwargs):
     # We're kept in a script subdirectory in kharma/
     mz_dir = os.path.dirname(os.path.realpath(__file__))
     # parent
-    kharma_dir = mz_dir+"/../../.."
+    kharma_dir = mz_dir+"/../.."
     # Get our name from the working dir
     run_name = os.getcwd().split("/")[-1]
 
@@ -163,6 +165,7 @@ def run_multizone(**kwargs):
             kwargs['r_b'] = 1e5
             logrho = -8.2014518
             log_u_over_rho = -5.2915149
+        args['bondi/mdot'] = kwargs['mdot']
         args['bondi/vacuum_logrho'] = logrho
         args['bondi/vacuum_log_u_over_rho'] = log_u_over_rho
         if abs(kwargs['gamma']- 5./3.)<1e-2:
@@ -171,18 +174,19 @@ def run_multizone(**kwargs):
         else:
             n = 1./(kwargs['gamma']-1)
             args['bondi/rs'] = (2*(n+3)-9)/(4*(n+1))*float(kwargs['r_b'])
-        args['bondi/ur_frac'] = 0
+        args['bondi/ur_frac'] = kwargs['urfrac']
 
         # B field additions
         if kwargs['bz'] != 0.0:
             # Set a field to initialize with 
             args['b_field/type'] = kwargs["btype"] #"r1s2" #"vertical"
             args['b_field/solver'] = "flux_ct"
-            args['b_field/bz'] = kwargs['bz']
+            args['b_field/A0'] = kwargs['bz']
             # Compress coordinates to save time
             if kwargs['coord'] is not None:
                 args['coordinates/transform'] = kwargs['coord']
-                args['coordinates/lin_frac'] = 0.7
+                args['coordinates/lin_frac'] = 0.6
+                args['coordinates/smoothness'] = 0.02
             elif kwargs['nx2'] >= 128 and not kwargs['onezone']:
                 args['coordinates/transform'] = "fmks"
                 args['coordinates/mks_smooth'] = 0.
@@ -274,10 +278,15 @@ def run_multizone(**kwargs):
                 # double the runtime for the outermost annulus
                 runtime *= 2 
             if args['coordinates/r_in']<2:
+                args['boundaries/inner_x1'] = 'outflow'
+                args['boundaries/check_inflow_inner_x1'] = 1
                 runtime *= 2 # double the runtime for innermost annulus
                 if kwargs['long_t_in']:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
                     runtime *= 5 # 5 tff at the log middle radius
+            else:
+                args['boundaries/inner_x1'] = 'dirichlet'
+                args['boundaries/check_inflow_inner_x1'] = 0
         else:
             runtime = float(kwargs['tlim'])
 
