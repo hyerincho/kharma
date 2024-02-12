@@ -3,6 +3,7 @@
 
 <parthenon/job>
 problem_id = bondi
+archive_parameters = true
 
 <parthenon/mesh>
 refinement = none
@@ -98,7 +99,6 @@ fix_flux_x1 = true
 verbose = 1
 flag_verbose = 2
 extra_checks = 1
-archive_parameters = 1
 
 <driver>
 type = harm
@@ -119,6 +119,7 @@ ghost_zones = true
 file_type = rst
 dt = 2644840240
 ghost_zones = true
+variables = prims
 
 <parthenon/output2>
 file_type = hst

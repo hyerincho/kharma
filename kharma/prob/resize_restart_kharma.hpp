@@ -137,31 +137,51 @@ KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, cons
 }
 
 KOKKOS_INLINE_FUNCTION void get_B_restart_kharma(const GRCoordinates& G, 
-                    const Real fx1min, const Real fx1max, const bool should_fill,
+                    const Real fx1min, const Real fx1max, const bool should_fill, const Loci loc,
                     const hsize_t length[GR_DIM], const hsize_t length_fill[GR_DIM],
-                    const GridScalar& x1, const GridScalar& x2, const GridScalar& x3, const GridVector& B,
-                    const GridScalar& x1_fill, const GridScalar& x2_fill, const GridScalar& x3_fill, const GridVector& B_fill, const GridVector& B_save,
-                    const int& k, const int& j, const int& i) 
+                    const hsize_t lengthf[GR_DIM], const hsize_t lengthf_fill[GR_DIM],
+                    const GridScalar& x1, const GridScalar& x2, const GridScalar& x3,
+                    const GridScalar& x1f, const GridScalar& x2f, const GridScalar& x3f, const GridVector& B,
+                    const GridScalar& x1_fill, const GridScalar& x2_fill, const GridScalar& x3_fill,
+                    const GridScalar& x1f_fill, const GridScalar& x2f_fill, const GridScalar& x3f_fill, const GridVector& B_fill, const GridVector& B_save,
+                    const int& v, const int& k, const int& j, const int& i) 
 {
     Real B_cons[NVEC];
     
     GReal X[GR_DIM];
-    G.coord(k, j, i, Loci::center, X);
+    G.coord(k, j, i, loc, X);
     GReal del[GR_DIM]; // not really needed now since I am doing nearest neighbor interpolation
     int iblocktemp, itemp, jtemp, ktemp;
+    hsize_t length_loc[GR_DIM], length_fill_loc[GR_DIM];
+    
+    DLOOP1 length_loc[mu] = length[mu];
+    DLOOP1 length_fill_loc[mu] = length_fill[mu];
+    if (loc != Loci::center) {
+        length_loc[dir_of(loc)] = lengthf[dir_of(loc)];
+        length_fill_loc[dir_of(loc)] = lengthf_fill[dir_of(loc)];
+    }
+ 
     // Interpolate the value at this location from the global grid
     if ((!should_fill) && (X[1]<fx1min)) {// if cannot be read from restart file
         // Just use the initialization from SeedBField
-        VLOOP B_cons[v] = 0.;
-   }
+        B_cons[v] = 0.;
+    }
     else if ((should_fill) && ((X[1]>fx1max)||(X[1]<fx1min))) { // fill with the fname_fill
-        Xtoindex(X, x1_fill, x2_fill, x3_fill, length_fill, iblocktemp, itemp, jtemp, ktemp, del);
-        VLOOP B_cons[v] = B_fill(v,iblocktemp,ktemp,jtemp,itemp);
+        if (i < length_fill_loc[1] && j < length_fill_loc[2] && k < length_fill_loc[3]) {
+            Xtoindex(X, (loc == Loci::face1)? x1f_fill : x1_fill, 
+                        (loc == Loci::face2)? x2f_fill : x2_fill, 
+                        (loc == Loci::face3)? x3f_fill : x3_fill, length_fill_loc, iblocktemp, itemp, jtemp, ktemp, del);
+            B_cons[v] = B_fill(v, iblocktemp, ktemp, jtemp, itemp);
+        }
     }
     else { 
-        Xtoindex(X, x1, x2, x3, length, iblocktemp, itemp, jtemp, ktemp, del);
-        VLOOP B_cons[v] = B(v,iblocktemp,ktemp,jtemp,itemp);
+        if (i < length_loc[1] && j < length_loc[2] && k < length_loc[3]) {
+            Xtoindex(X, (loc == Loci::face1)? x1f : x1, 
+                        (loc == Loci::face2)? x2f : x2, 
+                        (loc == Loci::face3)? x3f : x3, length_loc, iblocktemp, itemp, jtemp, ktemp, del);
+            B_cons[v] = B(v, iblocktemp, ktemp, jtemp, itemp);
+        }
     }
 
-    VLOOP B_save(v, k, j, i) = B_cons[v];
+    B_save(v, k, j, i) = B_cons[v];
 }

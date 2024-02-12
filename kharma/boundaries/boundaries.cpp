@@ -85,6 +85,9 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     }
     params.Add("fix_corner_inner", fix_corner);
     params.Add("fix_corner_outer", pin->GetOrAddBoolean("boundaries", "fix_corner_outer", false));
+    
+    bool derefine_poles = pin->GetBoolean("b_field", "derefine_poles");
+    params.Add("derefine_poles", derefine_poles);
 
     // We can't use GetVariablesByFlag yet, so ask the packages
     // These flags get anything that needs a physical boundary during the run
@@ -316,6 +319,7 @@ void KBoundaries::ApplyBoundary(std::shared_ptr<MeshBlockData<Real>> &rc, IndexD
     // If we're syncing EMFs and in spherical, explicitly zero polar faces
     // Since we manipulate the j coord, we'd overstep coarse bufs
     auto& emfpack = rc->PackVariables(std::vector<std::string>{"B_CT.emf"});
+    bool derefine_poles = params.Get<bool>("derefine_poles");
     if (params.Get<bool>("zero_EMF_" + bname) && emfpack.GetDim(4) > 0) {
         Flag("BoundaryEdge_"+bname);
         std::vector<TE> te_list;

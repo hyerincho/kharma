@@ -78,6 +78,10 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     // Need to preserve divergence if you refine/derefine during sim i.e. AMR
     if (lazy_prolongation && pin->GetString("parthenon/mesh", "refinement") == "adaptive")
         throw std::runtime_error("Cannot use non-preserving prolongation in AMR!");
+    
+    // Hyerin (01/17/24) de-refining cells near the poles
+    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
+    params.Add("derefine_poles", derefine_poles);
 
     // FIELDS
 
@@ -106,8 +110,8 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     m = Metadata(flags_cons, s_vector);
     pkg->AddField("cons.B", m);
     if (packages->Get("Globals")->Param<std::string>("problem") == "resize_restart_kharma") {
-        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::FillGhost, Metadata::Vector});
-        pkg->AddField("B_Save", m); // TODO (HYERIN): make this face centered
+        m = Metadata({Metadata::Real, Metadata::Face, Metadata::Derived, Metadata::FillGhost});
+        pkg->AddField("B_Save", m);
     }
 
     // EMF on edges.
@@ -517,4 +521,57 @@ void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
             divB(0, k, j, i) = face_div(G, B_U, ndim, k, j, i);
         }
     );
+}
+
+TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
+{
+    // HYERIN (01/17/24) this routine is not general yet and only applies to polar boundaries for now.
+    auto B_U = md->PackVariables(std::vector<std::string>{"cons.fB"});
+    const IndexRange block = IndexRange{0, B_U.GetDim(5)-1};
+    auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
+    
+    // Figure out indices
+    IndexRange3 bF1, bF2;
+    for (int i = 0; i < BOUNDARY_NFACES; i++) {
+        BoundaryFace bface = (BoundaryFace)i;
+        auto bname = KBoundaries::BoundaryName(bface);
+        auto bdir = KBoundaries::BoundaryDirection(bface);
+        auto domain = KBoundaries::BoundaryDomain(bface);
+        auto binner = KBoundaries::BoundaryIsInner(bface);
+        if (bdir == X2DIR) {
+            bF2 = KDomain::GetRange(md, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false); // TODO: expand to F3, no need for F2 (think about one layer of cells next to the boundary)?
+            bF1 = KDomain::GetRange(md, domain, F1);
+            auto j_f = (binner) ? bF2.je : bF2.js; // last physical face
+            auto j_c = (binner) ? j_f : j_f - 1; // last physical cell
+            int offset = (binner) ? 1 : -1; // offset to read the physical face values
+            int point_out = offset; // if F2 B field at j_f + offset face is positive when pointing out of the cell, +1.
+
+            pmb0->par_for("B_CT_derefine_poles", block.s, block.e, bF1.ks, bF1.ke, j_f, j_f, bF1.is, bF1.ie,
+                KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
+                    const auto& G = B_U.GetCoords(bl);
+                    if (k % 2 == 0) { // also extend to F3
+                        // F1: just average over the two fine cells TODO: check the indices!
+                        Real avg = (B_U(bl)(F1, 0, k, j_c, i) * G.Volume<F1>(k, j_c, i) + 
+                                    B_U(bl)(F1, 0, k + 1, j_c, i) * G.Volume<F1>(k + 1, j_c, i)) / 2.;
+                        B_U(bl)(F1, 0, k, j_c, i) = avg / G.Volume<F1>(k, j_c, i);
+                        B_U(bl)(F1, 0, k + 1, j_c, i) = avg / G.Volume<F1>(k + 1, j_c, i);
+                        //if (k == 4 && i == 15) printf("HYERIN: i,j,k = (%d, %d, %d) BF1 = %.3g, BF2 = %.3g\n", i,j,k, B_U(bl)(F1,0,k,j,i), B_U(bl)(F1,0,k+1,j,i));
+
+                        // F2: The two fine cells have summed 0 flux through the coarse X2 face.
+                        B_U(bl)(F2, 0, k, j, i) = 0.; //(B_U(bl)(F2, 0, k, j + offset, i) - B_U(bl)(F2, 0, k + 1, j + offset, i)) / 2.;
+                        B_U(bl)(F2, 0, k + 1, j, i) = 0.; //- B_U(bl)(F2, 0, k, j, i);
+                        //if (k == 4) printf("HYERIN: i,j,k = (%d, %d, %d) BF2_after = %.3g, j = %d, BF2_before = (%.3g, %.3g)\n", i,j,k, B_U(bl)(F2,0,k,j,i), j + offset, B_U(bl)(F2,0,k,j+offset,i), B_U(bl)(F2,0,k+1,j+offset,i));
+
+                        // F3
+                        B_U(bl)(F3, 0, k + 1, j_c, i) = (B_U(bl)(F3, 0, k, j_c, i) * G.Volume<F3>(k, j_c, i) 
+                                                        + B_U(bl)(F3, 0, k + 2, j_c, i) * G.Volume<F3>(k + 2, j_c, i) 
+                                                        + point_out * (B_U(bl)(F2, 0, k + 1, j + offset, i) * G.Volume<F2>(k + 1, j + offset, i)
+                                                        - B_U(bl)(F2, 0, k, j + offset, i) * G.Volume<F2>(k, j + offset, i)))
+                                                    / (2. * G.Volume<F3>(k + 1, j_c, i));
+                    }
+                }
+            );
+        }
+    }
+    return TaskStatus::complete;
 }
