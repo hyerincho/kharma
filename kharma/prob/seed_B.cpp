@@ -107,7 +107,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
     // Indices
     // TODO handle filling faces with domain < entire more gracefully
     IndexRange3 b = KDomain::GetRange(rc, domain);
-    IndexRange3 bf = KDomain::GetRange(rc, domain, 0, 1);
+    IndexRange3 be = KDomain::GetRange(rc, domain, 0, 1); // Corresponds to GetRange(E1/E2/E3)
     int ndim = pmb->pmy_mesh->ndim;
 
     // Shortcut to field values for easy fields
@@ -139,7 +139,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
             auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
             // Fill at 3 different locations
             pmb->par_for(
-                "B_field_B", bf.ks, bf.ke, bf.js, bf.je, bf.is, bf.ie,
+                "B_field_B", be.ks, be.ke, be.js, be.je, be.is, be.ie,
                 KOKKOS_LAMBDA(const int &k, const int &j, const int &i) {
                     GReal Xembed[GR_DIM];
                     double null1, null2;
@@ -233,6 +233,13 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
             if (m::abs(n-1.5) < 0.01) rb = rs * rs * 80. / (27. * gam);
             else rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
             break;
+        case BSeedType::r1gizmo:
+            gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
+            n = 1. / (gam - 1.);
+            rs = pin->GetOrAddReal("bondi", "rs", m::sqrt(1e5));
+            if (m::abs(n-1.5) < 0.01) rb = rs * rs * 80. / (27. * gam);
+            else rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
+            break;
         default:
             break;
         }
@@ -244,7 +251,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
         IndexSize3 sz = KDomain::GetBlockSize(rc);
         ParArrayND<double> A("A", NVEC, sz.n3+1, sz.n2+1, sz.n1+1);
         pmb->par_for(
-            "B_field_A", bf.ks, bf.ke, bf.js, bf.je, bf.is, bf.ie,
+            "B_field_A", be.ks, be.ke, be.js, be.je, be.is, be.ie,
             KOKKOS_LAMBDA(const int &k, const int &j, const int &i) {
                 GReal Xnative[GR_DIM];
                 GReal Xembed[GR_DIM], Xmidplane[GR_DIM];
@@ -320,9 +327,9 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
 
         if (pkgs.count("B_CT")) {
             auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
-            // This fills a couple zones outside the exact interior with bad data
-            // Careful of that w/e.g. Dirichlet bounds.
-            IndexRange3 bB = KDomain::GetRange(rc, domain);
+            // This is why we make A 1 zone larger than "entire":
+            // we need this stencil-2 op over the whole domain
+            IndexRange3 bB = KDomain::GetRange(rc, domain, 0, 1);
             if (ndim > 2) {
                 pmb->par_for(
                     "ot_B", bB.ks, bB.ke, bB.js, bB.je, bB.is, bB.ie,
@@ -342,7 +349,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                 GridVector B_Save = rc->Get("B_Save").data;
                 // Hyerin (12/19/22) copy over data after initialization
                 pmb->par_for(
-                    "B_field_B_3D", bf.ks, bf.ke, bf.js, bf.je, bf.is, bf.ie + 1,
+                    "B_field_B_3D", be.ks, be.ke, be.js, be.je, be.is, be.ie + 1,
                     KOKKOS_LAMBDA(const int &k, const int &j, const int &i) {
                         GReal X[GR_DIM];
                         G.coord(k, j, i, Loci::center, X);
@@ -351,7 +358,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                             // do nothing. just use the initialization from SeedBField
                         } else {
                             B_Uf(F1, 0, k, j, i) = B_Save(0, k, j, i);
-                            if (i < bf.ie + 1) {
+                            if (i < be.ie + 1) {
                                 B_Uf(F2, 0, k, j, i) = B_Save(1, k, j, i);
                                 B_Uf(F3, 0, k, j, i) = B_Save(2, k, j, i);
                             }
@@ -451,6 +458,8 @@ TaskStatus SeedBField(MeshData<Real> *md, ParameterInput *pin)
             status = SeedBFieldType<BSeedType::vertical>(rc, pin);
         } else if (b_field_type == "r1s2") {
             status = SeedBFieldType<BSeedType::r1s2>(rc, pin);
+        } else if (b_field_type == "r1gizmo") {
+            status = SeedBFieldType<BSeedType::r1gizmo>(rc, pin);
         } else if (b_field_type == "orszag_tang") {
             status = SeedBFieldType<BSeedType::orszag_tang>(rc, pin);
         } else if (b_field_type == "orszag_tang_a") {

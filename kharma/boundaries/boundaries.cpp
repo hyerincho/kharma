@@ -86,7 +86,7 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     params.Add("fix_corner_inner", fix_corner);
     params.Add("fix_corner_outer", pin->GetOrAddBoolean("boundaries", "fix_corner_outer", false));
     
-    bool derefine_poles = pin->GetBoolean("b_field", "derefine_poles");
+    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
     params.Add("derefine_poles", derefine_poles);
 
     // We can't use GetVariablesByFlag yet, so ask the packages
@@ -361,9 +361,9 @@ void KBoundaries::ApplyBoundary(std::shared_ptr<MeshBlockData<Real>> &rc, IndexD
         pmb->par_for(
             "reflect_face_vector_" + bname, b.ks, b.ke, b.js, b.je, b.is, b.ie,
             KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                fpack(el, 0, k, j, i) = ((bdir == 1 && i == i_f) ||
-                                         (bdir == 2 && j == j_f) ||
-                                         (bdir == 3 && j == k_f)) ? 0. : -fpack(el, 0, k, j, i);
+                if (bdir == 1) fpack(el, 0, k, j, i) = ((i == i_f) ? 0 : -fpack(el, 0, k, j, i_f - (i - i_f)));
+                if (bdir == 2) fpack(el, 0, k, j, i) = ((j == j_f) ? 0 : -fpack(el, 0, k, j_f - (j - j_f), i));
+                if (bdir == 3) fpack(el, 0, k, j, i) = ((k == k_f) ? 0 : -fpack(el, 0, k_f - (k - k_f), j, i));
             }
         );
         EndFlag();

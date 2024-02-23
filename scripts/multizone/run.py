@@ -101,6 +101,7 @@ def calc_rb(kwargs):
 @click.option("--combine_in_ann", is_flag=True, help="Combine two innermost annuli.")
 @click.option("--move_rin", is_flag=True, help="Move r_in instead of switching btw same sized annuli.")
 @click.option("--gamma_max", default=10, help="Gamma_max floor.")
+@click.option("--sigma_max", default=100, help="bsq_over_rho_max floor.")
 @click.option("--gamma", default=5.0 / 3, help="adiabatic index.")
 @click.option("--rhomin", default=1e-6, help="rho min geom.")
 @click.option("--umin", default=1e-8, help="u min geom.")
@@ -113,6 +114,7 @@ def calc_rb(kwargs):
 @click.option("--incorrectrb", is_flag=True, help="Use previous incorrect R_B calculation instead.")
 @click.option("--one_trun", is_flag=True, help="For innermost and outermost annuli, run for 1 t_char instead of 2.")
 @click.option("--loctchar", is_flag=True, help="Use local charateristic time instead of capping it at the Bondi time.")
+@click.option("--bclean", is_flag=True, help="Clean divergence of B fields.")
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
@@ -157,22 +159,22 @@ def run_multizone(**kwargs):
             args["coordinates/r_in"] = base**turn_around
         # Initialize half-vacuum, unless it's the first GIZMO run
         if kwargs["gizmo"]:
-            args["bondi/r_shell"] = 0 #3e6  # args['coordinates/r_in'] # not using r_shell
+            args["bondi/r_shell"] = 3e6  # args['coordinates/r_in'] # not using r_shell
         else:
             args["bondi/r_shell"] = base ** (turn_around + 2) / 2.0
 
         # bondi & vacuum parameters
         # TODO derive these from r_b or gizmo
-        if args["coordinates/r_out"] < 1e5 and kwargs["bz"] > 1e-4:  # kwargs['nzones'] == 3 or kwargs['nzones'] == 6:
-            kwargs["rs"] = 16
-            logrho = -4.13354231
-            log_u_over_rho = -2.57960521
-        elif kwargs["nzones"] == 4:
-            kwargs["rs"] = 16
-            logrho = -4.13354231
-            logrho = -4.200592800419657
-            log_u_over_rho = -2.62430556
-        elif kwargs["gizmo"]:
+        #if args["coordinates/r_out"] < 1e5 and kwargs["bz"] > 1e-4:  # kwargs['nzones'] == 3 or kwargs['nzones'] == 6:
+        #    kwargs["rs"] = 16
+        #    logrho = -4.13354231
+        #    log_u_over_rho = -2.57960521
+        #elif kwargs["nzones"] == 4:
+        #    kwargs["rs"] = 16
+        #    logrho = -4.13354231
+        #    logrho = -4.200592800419657
+        #    log_u_over_rho = -2.62430556
+        if kwargs["gizmo"]:
             # kwargs['r_b'] = 1e5
             logrho = -8.33399171  # -7.80243572
             log_u_over_rho = -5.34068635
@@ -195,6 +197,9 @@ def run_multizone(**kwargs):
             if (kwargs["b_ct"]): args["b_field/solver"] = "face_ct"
             else: args["b_field/solver"] = "flux_ct"
             args["b_field/A0"] = kwargs["bz"]
+            if kwargs["bclean"]:
+                args["b_field/initial_cleanup"] = 1
+                args["b_cleanup/rel_tolerance"] = 1.e-5
             # Compress coordinates to save time
             if kwargs["nx2"] >= 128 and not kwargs["onezone"]:
                 args["coordinates/transform"] = "fmks"
@@ -207,6 +212,7 @@ def run_multizone(**kwargs):
             # Enable the floors
             args["floors/disable_floors"] = False
             args["floors/gamma_max"] = kwargs["gamma_max"]
+            args["floors/bsq_over_rho_max"] = kwargs["sigma_max"]
             if kwargs["df"]:
                 args["floors/frame"] = "drift"
             # And modify a bunch of defaults

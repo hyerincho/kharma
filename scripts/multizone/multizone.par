@@ -61,7 +61,7 @@ nzone = 7
 # disable by default -- enabling B field overrides
 disable_floors = true
 # This caused issues?
-# frame = drift
+frame = drift
 # Usual geometric floors, no beta floor
 rho_min_geom = 1e-6
 u_min_geom = 1e-8
@@ -94,6 +94,9 @@ type = none
 solver = none
 fix_flux_x1 = true
 
+<b_cleanup>
+output_before_cleanup = true
+
 <debug>
 # Be very clear about errors
 verbose = 1
@@ -112,14 +115,13 @@ max_nonlinear_iter = 3
 file_type = hdf5
 dt = 528968040
 single_precision_output = false
-variables = prims.rho, prims.u, prims.uvec, prims.B, fflag, pflag, divB
+variables = prims.rho, prims.u, prims.uvec, prims.B, cons.fB, fflag, pflag, divB
 ghost_zones = true
 
 <parthenon/output1>
 file_type = rst
 dt = 2644840240
 ghost_zones = true
-variables = prims
 
 <parthenon/output2>
 file_type = hst
