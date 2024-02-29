@@ -102,13 +102,14 @@ def calc_rb(kwargs):
 @click.option("--move_rin", is_flag=True, help="Move r_in instead of switching btw same sized annuli.")
 @click.option("--gamma_max", default=10, help="Gamma_max floor.")
 @click.option("--sigma_max", default=100, help="bsq_over_rho_max floor.")
+@click.option("--b2u_max", default=None, help="bsq_over_u_max floor.")
 @click.option("--gamma", default=5.0 / 3, help="adiabatic index.")
 @click.option("--rhomin", default=1e-6, help="rho min geom.")
 @click.option("--umin", default=1e-8, help="u min geom.")
 @click.option("--btype", default="r1s2", help="b field type")
 @click.option("--coord", default=None, help="coordinate system")
 @click.option("--smoothness", default=0.02, help="smoothness for WKS")
-@click.option("--df", is_flag=True, help="Use drift frame instead of normal when applying floors.")
+@click.option("--frame", default="drift", help="Specify a frame when applying floors.")
 @click.option("--urfrac", default=0.0, help="ur_frac")
 @click.option("--uphi", default=0.0, help="uphi")
 @click.option("--incorrectrb", is_flag=True, help="Use previous incorrect R_B calculation instead.")
@@ -213,8 +214,8 @@ def run_multizone(**kwargs):
             args["floors/disable_floors"] = False
             args["floors/gamma_max"] = kwargs["gamma_max"]
             args["floors/bsq_over_rho_max"] = kwargs["sigma_max"]
-            if kwargs["df"]:
-                args["floors/frame"] = "drift"
+            if kwargs["b2u_max"] is not None: args["floors/bsq_over_u_max"] = float(kwargs["b2u_max"])
+            args["floors/frame"] = kwargs["frame"]
             # And modify a bunch of defaults
             # Assume we will always want jitter if we have B unless a 2D problem
             if kwargs["nx3"] > 1:  #
