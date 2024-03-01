@@ -224,7 +224,7 @@ def run_multizone(**kwargs):
             kwargs["cfl"] = 0.5
             if kwargs["recon"] is None:
                 # use weno5
-                args["GRMHD/reconstruction"] = "weno5"
+                args["driver/reconstruction"] = "weno5"
         if kwargs["coord"] is not None:
             args["coordinates/transform"] = kwargs["coord"]
             if kwargs["coord"] == "fmks":
@@ -237,7 +237,10 @@ def run_multizone(**kwargs):
                 args["coordinates/lin_frac"] = 0.6  # 0.75
                 args["coordinates/smoothness"] = kwargs["smoothness"]
         if kwargs["recon"] is not None:
-            args["GRMHD/reconstruction"] = kwargs["recon"]
+            if 'lower_edges' in kwargs["recon"]: args["driver/lower_edges"] = 1
+            if 'lower_poles' in kwargs["recon"]: args["driver/lower_poles"] = 1
+            if 'lower' in kwargs["recon"]: kwargs["recon"] = "weno5"
+            args["driver/reconstruction"] = kwargs["recon"]
         args["GRMHD/gamma"] = kwargs["gamma"]
         args["floors/rho_min_geom"] = kwargs["rhomin"]
         args["floors/u_min_geom"] = kwargs["umin"]
