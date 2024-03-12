@@ -527,6 +527,9 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
 {
     // HYERIN (01/17/24) this routine is not general yet and only applies to polar boundaries for now.
     auto B_U = md->PackVariables(std::vector<std::string>{"cons.fB"});
+    auto rho_U = md->PackVariables(std::vector<std::string>{"cons.rho"});
+    auto u_U = md->PackVariables(std::vector<std::string>{"cons.u"});
+    auto uvec_U = md->PackVariables(std::vector<std::string>{"cons.uvec"});
     const IndexRange block = IndexRange{0, B_U.GetDim(5)-1};
     auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
     
@@ -549,7 +552,7 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
             pmb0->par_for("B_CT_derefine_poles", block.s, block.e, bF1.ks, bF1.ke, j_f, j_f, bF1.is, bF1.ie,
                 KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
                     const auto& G = B_U.GetCoords(bl);
-                    if (k % 2 == 0) { // also extend to F3
+                    if (k % 2 == 0) {
                         // F1: just average over the two fine cells TODO: check the indices!
                         Real avg = (B_U(bl)(F1, 0, k, j_c, i) * G.Volume<F1>(k, j_c, i) + 
                                     B_U(bl)(F1, 0, k + 1, j_c, i) * G.Volume<F1>(k + 1, j_c, i)) / 2.;
@@ -568,6 +571,20 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                                                         + point_out * (B_U(bl)(F2, 0, k + 1, j + offset, i) * G.Volume<F2>(k + 1, j + offset, i)
                                                         - B_U(bl)(F2, 0, k, j + offset, i) * G.Volume<F2>(k, j + offset, i)))
                                                     / (2. * G.Volume<F3>(k + 1, j_c, i));
+
+                        // average the fluid quantities
+                        avg = (rho_U(bl)(0, k, j_c, i) + rho_U(bl)(0, k + 1, j_c, i)) / 2.;
+                        //if (k == 4 && i == 15) printf("HYERIN: i,j,k = (%d %d %d) rho = %.6g and %.6g and avg is %.6g\n", i,j_c,k,rho_U(bl)(0,k,j_c,i), rho_U(bl)(0,k+1,j_c,i),avg);
+                        rho_U(bl)(0, k, j_c, i) = avg;
+                        rho_U(bl)(0, k + 1, j_c, i) = avg;
+                        avg = (u_U(bl)(0, k, j_c, i) + u_U(bl)(0, k + 1, j_c, i)) / 2.;
+                        u_U(bl)(0, k, j_c, i) = avg;
+                        u_U(bl)(0, k + 1, j_c, i) = avg;
+                        VLOOP {
+                            avg = (uvec_U(bl)(v, k, j_c, i) + uvec_U(bl)(v, k + 1, j_c, i)) / 2.;
+                            uvec_U(bl)(v, k, j_c, i) = avg;
+                            uvec_U(bl)(v, k + 1, j_c, i) = avg;
+                        }
                     }
                 }
             );

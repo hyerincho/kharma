@@ -117,6 +117,7 @@ def calc_rb(kwargs):
 @click.option("--loctchar", is_flag=True, help="Use local charateristic time instead of capping it at the Bondi time.")
 @click.option("--bclean", is_flag=True, help="Clean divergence of B fields.")
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
+@click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -197,6 +198,7 @@ def run_multizone(**kwargs):
             args["b_field/type"] = kwargs["btype"]  # "r1s2" #"vertical"
             if (kwargs["b_ct"]): args["b_field/solver"] = "face_ct"
             else: args["b_field/solver"] = "flux_ct"
+            if (kwargs["derefine_poles"]): args["b_field/derefine_poles"] = 1
             args["b_field/A0"] = kwargs["bz"]
             if kwargs["bclean"]:
                 args["b_field/initial_cleanup"] = 1

@@ -534,7 +534,6 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
         }
     );
     if (include_B) {
-        printf("HYERIN: STARTING B FILED\n");
         pmb->par_for("copy_restart_state_kharma", ks, ke + (b_ct), js, je + (b_ct), is, ie + (b_ct),
             KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                 VLOOP {

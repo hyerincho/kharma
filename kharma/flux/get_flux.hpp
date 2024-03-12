@@ -188,18 +188,18 @@ inline TaskStatus GetFlux(MeshData<Real> *md)
     EndFlag();
 
     // If we have B field on faces, we must replace reconstructed version with that
-    if (pmb0->packages.AllPackages().count("B_CT")) {  // TODO if variable "cons.fB"?
-        const auto& Bf  = md->PackVariables(std::vector<std::string>{"cons.fB"});
-        const TopologicalElement face = (dir == 1) ? F1 : ((dir == 2) ? F2 : F3);
-        pmb0->par_for("replace_face", block.s, block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-            KOKKOS_LAMBDA(const int& bl, const int& k, const int& j, const int& i) {
-                const auto& G = U_all.GetCoords(bl);
-                const double bf = Bf(bl, face, 0, k, j, i) / G.gdet(loc, j, i);
-                Pl_all(bl, m_p.B1+dir-1, k, j, i) = bf;
-                Pr_all(bl, m_p.B1+dir-1, k, j, i) = bf;
-            }
-        );
-    }
+    //if (pmb0->packages.AllPackages().count("B_CT")) {  // TODO if variable "cons.fB"?
+    //    const auto& Bf  = md->PackVariables(std::vector<std::string>{"cons.fB"});
+    //    const TopologicalElement face = (dir == 1) ? F1 : ((dir == 2) ? F2 : F3);
+    //    pmb0->par_for("replace_face", block.s, block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+    //        KOKKOS_LAMBDA(const int& bl, const int& k, const int& j, const int& i) {
+    //            const auto& G = U_all.GetCoords(bl);
+    //            const double bf = Bf(bl, face, 0, k, j, i) / G.gdet(loc, j, i);
+    //            Pl_all(bl, m_p.B1+dir-1, k, j, i) = bf;
+    //            Pr_all(bl, m_p.B1+dir-1, k, j, i) = bf;
+    //        }
+    //    );
+    //}
 
     // Now that this is split, we add the biggest TODO in KHARMA
     // TODO per-package prim_to_flux?  Is that slower?

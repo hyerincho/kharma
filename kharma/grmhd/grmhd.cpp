@@ -118,6 +118,10 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     params.Add("refine_tol", refine_tol);
     Real derefine_tol = pin->GetOrAddReal("GRMHD", "derefine_tol", 0.05);
     params.Add("derefine_tol", derefine_tol);
+    
+    // Added by Hyerin (03/07/24)
+    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
+    params.Add("derefine_poles", derefine_poles);
 
     // =================================== FIELDS ===================================
 
@@ -216,6 +220,9 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     auto& globals = pmb->packages.Get("Globals")->AllParams();
     const auto& grmhd_pars = pmb->packages.Get("GRMHD")->AllParams();
 
+    // Added by Hyerin (03/07/24)
+    bool derefine_poles = grmhd_pars.Get<bool>("derefine_poles");
+
     if (!globals.Get<bool>("in_loop")) {
         if (grmhd_pars.Get<bool>("start_dt_light") ||
             grmhd_pars.Get<bool>("use_dt_light")) {
@@ -256,7 +263,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
                       Real &local_result) {
             double ndt_zone = 1 / (1 / (G.Dxc<1>(i) /  m::max(cmax(0, k, j, i), cmin(0, k, j, i))) +
                                    1 / (G.Dxc<2>(j) /  m::max(cmax(1, k, j, i), cmin(1, k, j, i))) +
-                                   1 / (G.Dxc<3>(k) /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
+                                   1 / (G.Dxc<3>(k) * (derefine_poles? 2 : 1) /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
 
             if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
                 local_result = ndt_zone;
@@ -264,7 +271,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
         }
     , Kokkos::Min<Real>(min_ndt));
     // TODO(BSP) this would need work for non-rectangular grids.
-    const double nctop = m::min(G.Dxc<1>(0), m::min(G.Dxc<2>(0), G.Dxc<3>(0))) / min_ndt;
+    const double nctop = m::min(G.Dxc<1>(0), m::min(G.Dxc<2>(0), G.Dxc<3>(0) * (derefine_poles? 2 : 1))) / min_ndt;
 
     // TODO print location
     //std::cout << "New min timestep: " << min_ndt << std::endl;
