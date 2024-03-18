@@ -57,7 +57,6 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     bool spherical = pin->GetBoolean("coordinates", "spherical");
     // Global check inflow sets inner/outer X1 by default
     bool check_inflow_global = pin->GetOrAddBoolean("boundaries", "check_inflow", spherical);
-    // TODO TODO Support old option names check_inflow_inner, check_inflow_outer
 
     // Ensure fluxes through the zero-size face at the pole are zero
     bool zero_polar_flux = pin->GetOrAddBoolean("boundaries", "zero_polar_flux", spherical);
@@ -128,8 +127,6 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
             const int n2_f = (nx2 == 1) ? nx2 : nx2 + 2 * ng + 1;
             const int nx3 = pin->GetInteger("parthenon/meshblock", "nx3");
             const int n3_f = (nx3 == 1) ? nx3 : nx3 + 2 * ng + 1;
-
-            std::cerr << "Face fluid vars: " << nvar_f << std::endl;
 
             // These are declared *backward* from how they will be indexed
             std::vector<int> s_x1_f({ng_f, n2_f, n3_f, nvar_f});
@@ -341,25 +338,27 @@ void KBoundaries::ApplyBoundary(std::shared_ptr<MeshBlockData<Real>> &rc, IndexD
     }
 
     // Zero/invert XN faces at a reflecting XN boundary (nearly always X2)
+    // Replaces reflecting face values at reflecting boundaries, Parthenon messes them up
     auto fpack = rc->PackVariables({Metadata::Face, Metadata::FillGhost});
     if (params.Get<bool>("reflect_face_vector_" + bname) && fpack.GetDim(4) > 0) {
         Flag("BoundaryFace_"+bname);
-        TE el = (bdir == 1) ? F1 : (bdir == 2) ? F2 : F3;
+        const TopologicalElement face = FaceOf(bdir);
         // This is the domain of the boundary/ghost zones
         // Augment the domain since we're always modifying e.g. F2 in X2 boundary
-        auto b = KDomain::GetRange(rc, domain, el, (binner) ? 0 : -1, (binner) ? 1 : 0, coarse);
+        auto b = KDomain::GetRange(rc, domain, face, (binner) ? 0 : -1, (binner) ? 1 : 0, coarse);
         // Zero the last physical face, otherwise invert.
         auto i_f = (binner) ? b.ie : b.is;
         auto j_f = (binner) ? b.je : b.js;
         auto k_f = (binner) ? b.ke : b.ks;
-        // Values are *reflected* by Parthenon, but vector must be *inverted* by us
-        // (since Parthenon doesn't know B2 on the F2 face is a vector X2 component & thus switches sign)
         pmb->par_for(
             "reflect_face_vector_" + bname, b.ks, b.ke, b.js, b.je, b.is, b.ie,
             KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                if (bdir == 1) fpack(el, 0, k, j, i) = ((i == i_f) ? 0 : -fpack(el, 0, k, j, i_f - (i - i_f)));
-                if (bdir == 2) fpack(el, 0, k, j, i) = ((j == j_f) ? 0 : -fpack(el, 0, k, j_f - (j - j_f), i));
-                if (bdir == 3) fpack(el, 0, k, j, i) = ((k == k_f) ? 0 : -fpack(el, 0, k_f - (k - k_f), j, i));
+                const int kk = (bdir == 3) ? k_f - (k - k_f) : k;
+                const int jj = (bdir == 2) ? j_f - (j - j_f) : j;
+                const int ii = (bdir == 1) ? i_f - (i - i_f) : i;
+                fpack(face, 0, k, j, i) = ((bdir == 1 && i == i_f) ||
+                                           (bdir == 2 && j == j_f) ||
+                                           (bdir == 3 && k == k_f)) ? 0. : -fpack(face, 0, kk, jj, ii);
             }
         );
         EndFlag();

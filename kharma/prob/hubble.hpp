@@ -1,5 +1,5 @@
 /* 
- *  File: wind.hpp
+ *  File: hubble.hpp
  *  
  *  BSD 3-Clause License
  *  
@@ -33,20 +33,25 @@
  */
 #pragma once
 
-#include "grmhd_functions.hpp"
+#include <complex>
+
+#include "decs.hpp"
 
 #include <parthenon/parthenon.hpp>
 
-namespace Wind {
+using namespace std;
+using namespace parthenon;
 
 /**
- * Initialize the wind package with several options from the input deck
+ * Test of electron entropy/temperature evolution in 1D Hubble-type flow
+ * Test of "Electrons" package
+ * See Ressler+ 2015
  */
-std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages);
+TaskStatus InitializeHubble(MeshBlockData<Real> *rc, ParameterInput *pin);
 
 /**
- * Add the wind source term.  Applied in Flux::AddSource, just after the FluxDivergence calculation
+ * Set all values on a given domain to the Hubble flow solution
+ * 
+ * Used for initialization and boundary conditions
  */
-TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain);
-
-}
+TaskStatus SetHubble(MeshBlockData<Real> *rc, IndexDomain domain=IndexDomain::entire, bool coarse=false);
