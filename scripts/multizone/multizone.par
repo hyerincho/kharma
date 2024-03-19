@@ -110,6 +110,9 @@ two_sync = true
 <implicit>
 max_nonlinear_iter = 3
 
+<fofc>
+on = 1
+
 # Output timings set in run.py
 <parthenon/output0>
 file_type = hdf5

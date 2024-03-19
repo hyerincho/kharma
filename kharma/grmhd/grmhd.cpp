@@ -262,9 +262,10 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     pmb->par_reduce("ndt_min", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int k, const int j, const int i,
                       Real &local_result) {
+            bool take_larger_steps = (derefine_poles) && ((j == jb.s) || (j == jb.e));
             double ndt_zone = 1 / (1 / (G.Dxc<1>(i) /  m::max(cmax(0, k, j, i), cmin(0, k, j, i))) +
                                    1 / (G.Dxc<2>(j) /  m::max(cmax(1, k, j, i), cmin(1, k, j, i))) +
-                                   1 / (G.Dxc<3>(k) * (derefine_poles? 2 : 1) /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
+                                   1 / (G.Dxc<3>(k) * (take_larger_steps? 2 : 1) /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
 
             if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
                 local_result = ndt_zone;
@@ -272,7 +273,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
         }
     , Kokkos::Min<Real>(min_ndt));
     // TODO(BSP) this would need work for non-rectangular grids.
-    const double nctop = m::min(G.Dxc<1>(0), m::min(G.Dxc<2>(0), G.Dxc<3>(0) * (derefine_poles? 2 : 1))) / min_ndt;
+    const double nctop = m::min(G.Dxc<1>(0), m::min(G.Dxc<2>(0), G.Dxc<3>(0))) / min_ndt;
 
     // TODO print location
     //std::cout << "New min timestep: " << min_ndt << std::endl;
