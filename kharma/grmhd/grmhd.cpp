@@ -119,9 +119,11 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     Real derefine_tol = pin->GetOrAddReal("GRMHD", "derefine_tol", 0.05);
     params.Add("derefine_tol", derefine_tol);
     
-    // Added by Hyerin (03/07/24)
-    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
-    params.Add("derefine_poles", derefine_poles);
+    // internal SMR :Added by Hyerin (03/07/24)
+    bool ismr_poles = pin->GetOrAddBoolean("GRMHD", "ismr_poles", false);
+    params.Add("ismr_poles", ismr_poles);
+    int ismr_nlevels = pin->GetOrAddInteger("GRMHD", "ismr_nlevels", 1);
+    params.Add("ismr_nlevels", ismr_nlevels);
 
     // =================================== FIELDS ===================================
 
@@ -221,7 +223,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     const auto& grmhd_pars = pmb->packages.Get("GRMHD")->AllParams();
 
     // Added by Hyerin (03/07/24)
-    bool derefine_poles = grmhd_pars.Get<bool>("derefine_poles");
+    bool ismr_poles = grmhd_pars.Get<bool>("ismr_poles");
 
     if (!globals.Get<bool>("in_loop")) {
         if (grmhd_pars.Get<bool>("start_dt_light") ||
@@ -261,7 +263,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     pmb->par_reduce("ndt_min", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int k, const int j, const int i,
                       Real &local_result) {
-            bool take_larger_steps = (derefine_poles) && ((j == jb.s) || (j == jb.e));
+            bool take_larger_steps = (ismr_poles) && ((j == jb.s) || (j == jb.e));
             double ndt_zone = 1 / (1 / (G.Dxc<1>(i) /  m::max(cmax(0, k, j, i), cmin(0, k, j, i))) +
                                    1 / (G.Dxc<2>(j) /  m::max(cmax(1, k, j, i), cmin(1, k, j, i))) +
                                    1 / (G.Dxc<3>(k) * (take_larger_steps? 2 : 1) /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));

@@ -79,10 +79,6 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     if (lazy_prolongation && pin->GetString("parthenon/mesh", "refinement") == "adaptive")
         throw std::runtime_error("Cannot use non-preserving prolongation in AMR!");
     
-    // Hyerin (01/17/24) de-refining cells near the poles
-    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
-    params.Add("derefine_poles", derefine_poles);
-
     // FIELDS
 
     // Flags for B fields on faces.
@@ -523,7 +519,7 @@ void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
     );
 }
 
-TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
+TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, int nlevels)
 {
     // HYERIN (01/17/24) this routine is not general yet and only applies to polar boundaries for now.
     auto B_U = md->PackVariables(std::vector<std::string>{"cons.fB"});
@@ -542,39 +538,39 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
         auto domain = KBoundaries::BoundaryDomain(bface);
         auto binner = KBoundaries::BoundaryIsInner(bface);
         if (bdir == X2DIR) {
-            bF2 = KDomain::GetRange(md, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false); // TODO: expand to F3, no need for F2 (think about one layer of cells next to the boundary)?
+            bF2 = KDomain::GetRange(md, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false); 
             bF1 = KDomain::GetRange(md, domain, F1);
             auto j_f = (binner) ? bF2.je : bF2.js; // last physical face
             auto j_c = (binner) ? j_f : j_f - 1; // last physical cell
             int offset = (binner) ? 1 : -1; // offset to read the physical face values
             int point_out = offset; // if F2 B field at j_f + offset face is positive when pointing out of the cell, +1.
+            const IndexRange j_p = IndexRange{(binner) ? j_f : j_f - (nlevels - 1), (binner) ? j_f + (nlevels - 1) : j_f}; // layers near the poles to be derefined
 
-            pmb0->par_for("B_CT_derefine_poles", block.s, block.e, bF1.ks, bF1.ke, j_f, j_f, bF1.is, bF1.ie,
+            pmb0->par_for("B_CT_derefine_poles", block.s, block.e, bF1.ks, bF1.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
                 KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
                     const auto& G = B_U.GetCoords(bl);
-                    if (k % 2 == 0) {
-                        // F1: just average over the two fine cells TODO: check the indices!
+                    int coarse_cell_len = 2 * (m::abs(j_f - j) + 1);
+                    if (k % coarse_cell_len == 0) {
+                        // F1: just average over the two fine cells
                         Real avg = (B_U(bl)(F1, 0, k, j_c, i) * G.Volume<F1>(k, j_c, i) + 
                                     B_U(bl)(F1, 0, k + 1, j_c, i) * G.Volume<F1>(k + 1, j_c, i)) / 2.;
                         B_U(bl)(F1, 0, k, j_c, i) = avg / G.Volume<F1>(k, j_c, i);
                         B_U(bl)(F1, 0, k + 1, j_c, i) = avg / G.Volume<F1>(k + 1, j_c, i);
                         //if (k == 4 && i == 15) printf("HYERIN: i,j,k = (%d, %d, %d) BF1 = %.3g, BF2 = %.3g\n", i,j,k, B_U(bl)(F1,0,k,j,i), B_U(bl)(F1,0,k+1,j,i));
 
-                        // F2: The two fine cells have summed 0 flux through the coarse X2 face.
-                        B_U(bl)(F2, 0, k, j, i) = 0.; //(B_U(bl)(F2, 0, k, j + offset, i) - B_U(bl)(F2, 0, k + 1, j + offset, i)) / 2.;
-                        B_U(bl)(F2, 0, k + 1, j, i) = 0.; //- B_U(bl)(F2, 0, k, j, i);
-                        //if (k == 4) printf("HYERIN: i,j,k = (%d, %d, %d) BF2_after = %.3g, j = %d, BF2_before = (%.3g, %.3g)\n", i,j,k, B_U(bl)(F2,0,k,j,i), j + offset, B_U(bl)(F2,0,k,j+offset,i), B_U(bl)(F2,0,k+1,j+offset,i));
+                        // F2: The two fine cells have 0 fluxes through the physical-ghost boundaries.
+                        B_U(bl)(F2, 0, k, j, i) = 0.; 
+                        B_U(bl)(F2, 0, k + 1, j, i) = 0.; 
 
-                        // F3
+                        // F3: The internal face between the two fine cells will take care of the divB=0. The two other faces of the coarse cell will remain unchanged.
                         B_U(bl)(F3, 0, k + 1, j_c, i) = (B_U(bl)(F3, 0, k, j_c, i) * G.Volume<F3>(k, j_c, i) 
                                                         + B_U(bl)(F3, 0, k + 2, j_c, i) * G.Volume<F3>(k + 2, j_c, i) 
                                                         + point_out * (B_U(bl)(F2, 0, k + 1, j + offset, i) * G.Volume<F2>(k + 1, j + offset, i)
                                                         - B_U(bl)(F2, 0, k, j + offset, i) * G.Volume<F2>(k, j + offset, i)))
                                                     / (2. * G.Volume<F3>(k + 1, j_c, i));
 
-                        // average the fluid quantities
+                        // average the fluid quantities TODO: separate this into a separate routine.
                         avg = (rho_U(bl)(0, k, j_c, i) + rho_U(bl)(0, k + 1, j_c, i)) / 2.;
-                        //if (k == 4 && i == 15) printf("HYERIN: i,j,k = (%d %d %d) rho = %.6g and %.6g and avg is %.6g\n", i,j_c,k,rho_U(bl)(0,k,j_c,i), rho_U(bl)(0,k+1,j_c,i),avg);
                         rho_U(bl)(0, k, j_c, i) = avg;
                         rho_U(bl)(0, k + 1, j_c, i) = avg;
                         avg = (u_U(bl)(0, k, j_c, i) + u_U(bl)(0, k + 1, j_c, i)) / 2.;

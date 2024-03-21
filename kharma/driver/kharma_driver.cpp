@@ -86,7 +86,7 @@ std::shared_ptr<KHARMAPackage> KHARMADriver::Initialize(ParameterInput *pin, std
     std::string recon = pin->GetOrAddString("driver", "reconstruction", "weno5", allowed_vals);
     bool lower_edges = pin->GetOrAddBoolean("driver", "lower_edges", false);
     bool lower_poles = pin->GetOrAddBoolean("driver", "lower_poles", false);
-    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
+    bool ismr_poles = pin->GetOrAddBoolean("GRMHD", "ismr_poles", false);
     if (lower_edges && lower_poles)
         throw std::runtime_error("Cannot enable lowered reconstruction on edges and poles!");
     if ((lower_edges || lower_poles) && recon != "weno5")
@@ -102,7 +102,7 @@ std::shared_ptr<KHARMAPackage> KHARMADriver::Initialize(ParameterInput *pin, std
     } else if (recon == "linear_mc") {
         params.Add("recon", KReconstruction::Type::linear_mc);
         stencil = 3;
-    } else if (recon == "weno5" && derefine_poles) {
+    } else if (recon == "weno5" && ismr_poles) {
         params.Add("recon", KReconstruction::Type::weno5_ismr);
         stencil = 5;
     } else if (recon == "weno5" && lower_edges) {

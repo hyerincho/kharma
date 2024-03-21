@@ -287,8 +287,8 @@ TaskCollection KHARMADriver::MakeDefaultTaskCollection(BlockList_t &blocks, int 
 
         auto t_step_done = t_ptou;
         if (use_b_ct) {
-            auto& b_ct_pkg = pkgs.at("B_CT")->AllParams();
-            bool derefine_poles = b_ct_pkg.Get<bool>("derefine_poles");
+            auto& grmhd_pkg = pkgs.at("GRMHD")->AllParams();
+            bool derefine_poles = grmhd_pkg.Get<bool>("ismr_poles");
             if (derefine_poles) {
                 auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
                 t_step_done = tl.AddTask(t_derefine_poles, Packages::MeshUtoP, md_sub_step_final.get(), IndexDomain::entire, false);
