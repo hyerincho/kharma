@@ -86,6 +86,7 @@ std::shared_ptr<KHARMAPackage> KHARMADriver::Initialize(ParameterInput *pin, std
     std::string recon = pin->GetOrAddString("driver", "reconstruction", "weno5", allowed_vals);
     bool lower_edges = pin->GetOrAddBoolean("driver", "lower_edges", false);
     bool lower_poles = pin->GetOrAddBoolean("driver", "lower_poles", false);
+    bool derefine_poles = pin->GetOrAddBoolean("b_field", "derefine_poles", false);
     if (lower_edges && lower_poles)
         throw std::runtime_error("Cannot enable lowered reconstruction on edges and poles!");
     if ((lower_edges || lower_poles) && recon != "weno5")
@@ -101,6 +102,9 @@ std::shared_ptr<KHARMAPackage> KHARMADriver::Initialize(ParameterInput *pin, std
     } else if (recon == "linear_mc") {
         params.Add("recon", KReconstruction::Type::linear_mc);
         stencil = 3;
+    } else if (recon == "weno5" && derefine_poles) {
+        params.Add("recon", KReconstruction::Type::weno5_ismr);
+        stencil = 5;
     } else if (recon == "weno5" && lower_edges) {
         params.Add("recon", KReconstruction::Type::weno5_lower_edges);
         stencil = 5;
@@ -270,6 +274,11 @@ TaskID KHARMADriver::AddFluxCalculations(TaskID& t_start, TaskList& tl, KReconst
         t_calculate_flux1 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::weno5_lower_poles, X1DIR>, md);
         t_calculate_flux2 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::weno5_lower_poles, X2DIR>, md);
         t_calculate_flux3 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::weno5_lower_poles, X3DIR>, md);
+        break;
+    case RType::weno5_ismr:
+        t_calculate_flux1 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::weno5_ismr, X1DIR>, md);
+        t_calculate_flux2 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::weno5_ismr, X2DIR>, md);
+        t_calculate_flux3 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::weno5_ismr, X3DIR>, md);
         break;
     default:
         std::cerr << "Reconstruction type not supported!  Main supported reconstructions:" << std::endl
