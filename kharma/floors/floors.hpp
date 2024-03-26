@@ -158,27 +158,33 @@ KOKKOS_INLINE_FUNCTION int apply_ceilings(const GRCoordinates& G, const Variable
     // 1. Limit gamma with respect to normal observer
     Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, loc);
     Real f, V02, cs2, betagamma2_max, betagamma2;
+    GReal Xembed[GR_DIM];
+    G.coord_embed(k, j, i, Loci::center, Xembed);
+    GReal r = Xembed[1];
+    const GReal a = G.coords.get_a();
+    GReal r_eh = 1 + m::sqrt(1 - a*a);
 
-    if (floors.use_r_gamma_max) {
-        GReal Xembed[GR_DIM];
-        G.coord_embed(k, j, i, Loci::center, Xembed);
-        GReal r = Xembed[1];
+    if (floors.use_r_gamma_max && r > 1.5 * r_eh) {
         V02 = m::pow(floors.gamma_max, 2.);
         cs2 = 27. * gam / (80. * floors.rs_bondi * floors.rs_bondi);
         betagamma2_max = V02 * (1. / r + cs2);
         betagamma2 = m::pow(gamma, 2) - 1.;
-        if (betagamma2 > betagamma2_max) {
+        FourVectors Dtmp_old, Dtmp_new;
+        GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_old);
+        if (betagamma2 > betagamma2_max && Dtmp_old.ucon[1] > 0) {
+            // only apply for outflowing gas cells
             fflag |= HIT_FLOOR_GAMMA;
 
-            FourVectors Dtmp_old, Dtmp_new;
             Real mhd_old[GR_DIM], mhd_new[GR_DIM];
             Real FE_old, FE_new; // T^r_t + rho * u^r values
             Real del_rho; // extra density to add
+            Real frac_rho; // fractional density to add
+            Real rho_temp = P(m_p.RHO, k, j, i);
+            Real u_temp = P(m_p.UU, k, j, i);
 
             // (T^r_t + rho * u^r) old
-            GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_old);
             Flux::calc_tensor(G, P, m_p, Dtmp_old, gam, k, j, i, 1, mhd_old);
-            FE_old = mhd_old[0] + P(m_p.RHO, k, j, i) * Dtmp_old.ucon[1];
+            FE_old = mhd_old[0] + rho_temp * Dtmp_old.ucon[1];
 
             f = m::sqrt(betagamma2_max / betagamma2);
             VLOOP P(m_p.U1+v, k, j, i) *= f;
@@ -186,13 +192,36 @@ KOKKOS_INLINE_FUNCTION int apply_ceilings(const GRCoordinates& G, const Variable
             // (T^r_t + rho * u^r) new after changing velocities
             GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_new);
             Flux::calc_tensor(G, P, m_p, Dtmp_new, gam, k, j, i, 1, mhd_new);
-            FE_new = mhd_new[0] + P(m_p.RHO, k, j, i) * Dtmp_new.ucon[1];
+            FE_new = mhd_new[0] + rho_temp * Dtmp_new.ucon[1];
             
             // determine how much rho to add
-            del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1] 
+            // old prescription, doesn't control final resulting sound speed below beta*gamma max
+            del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]
                                             + betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.));
+            //  new prescription (12/13/23): always set the final sound speed equal to beta*gamma_max
+            //del_rho = (FE_old - FE_new - (betagamma2_max * rho_temp / (gam - 1.) - gam * u_temp) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]) / 
+            //            (Dtmp_new.ucon[1] + (1. + betagamma2_max / (gam - 1.)) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]);
+            if (del_rho < 0) {
+                printf("HYERIN: r=%.3g f=%.5g betagamma2=%.3g betagamma2_max=%.3g before: (1+u_t)=%.3g, u^r=%.3g, U^1=%.3g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g, after: (1+u_t)=%.3g, u^r=%.3g, U^1=%.3g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g\n", r, f, betagamma2, betagamma2_max,
+                        (1. + Dtmp_old.ucov[0]), Dtmp_old.ucon[1], P(m_p.U1, k, j, i) / f, gamma * u_temp * Dtmp_old.ucon[1] * Dtmp_old.ucov[0],
+                        dot(Dtmp_old.bcon, Dtmp_old.bcov) * Dtmp_old.ucon[1] * Dtmp_old.ucov[0], -Dtmp_old.bcon[1] * Dtmp_old.bcov[0],
+                        (1. + Dtmp_new.ucov[0]), Dtmp_new.ucon[1], P(m_p.U1, k, j, i), m::sqrt(1. + betagamma2_max) * u_temp * Dtmp_new.ucon[1] * Dtmp_new.ucov[0],
+                        dot(Dtmp_new.bcon, Dtmp_new.bcov) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0], -Dtmp_new.bcon[1] * Dtmp_new.bcov[0]);
+            }
+            del_rho = m::max(del_rho, 0.);
+            frac_rho = del_rho / rho_temp;
+            //if (frac_rho > 0.1) {
+            //    if (frac_rho > 0.1) printf("HYERIN: fractional density too high of %.3g \n", frac_rho);
+            //    frac_rho = 0.; //then don't adjust rho, u
+            //}
+            //del_rho = m::min(frac_rho, 0.01) * rho_temp; // (12/05/23) trying this out to prevent from crashing, not using this for now.
+            del_rho = frac_rho * rho_temp; // (12/14/23)
+            if (del_rho < 0) printf("HYERIN: del_rho still negative!\n");
             P(m_p.RHO, k, j, i) += del_rho;
+            // old prescription
             P(m_p.UU, k, j, i) += del_rho * betagamma2_max / (gam * (gam - 1.));
+            // new prescription (12/13/23)
+            //if (frac_rho > 0) P(m_p.UU, k, j, i) = betagamma2_max * P(m_p.RHO, k, j, i) / (gam * (gam - 1.));
 
             //Real gamma_new = GRMHD::lorentz_calc(G, P, m_p, k, j, i, loc);
         }
