@@ -53,7 +53,7 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
     GridVector B_P = rc->Get("prims.B").data;
     GridVector B_U = rc->Get("cons.B").data;
     GridVector B_Save = rc->Get("B_Save").data;
-    Real fx1min, fx1max, dx1, fx1min_ghost;
+    Real fx1min, fx1max, dx1, fx1min_ghost;//, r_shell;
     int n1tot;
     if (pin->GetString("parthenon/job", "problem_id") == "resize_restart_kharma") {
         fx1min = pmb->packages.Get("GRMHD")->Param<Real>("rx1min");
@@ -61,6 +61,8 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
         n1tot = pmb->packages.Get("GRMHD")->Param<int>("rnx1");
         dx1 = (fx1max - fx1min) / n1tot;
         fx1min_ghost = fx1min - 4*dx1;
+    //} else if (pin->GetString("parthenon/job", "problem_id") == "bondi") {
+    //    r_shell = pmb->packages.Get("GRMHD")->Param<Real>("r_shell");
     }
     auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill", "none");
     const bool should_fill = !(fname_fill == "none");
@@ -352,22 +354,41 @@ TaskStatus B_FluxCT::SeedBField(MeshBlockData<Real> *rc, ParameterInput *pin)
             }
         );
     }
-    if (pin->GetString("parthenon/job", "problem_id") == "resize_restart_kharma") {
+    if ((pin->GetString("parthenon/job", "problem_id") == "resize_restart_kharma") ||
+        ((pin->GetString("parthenon/job", "problem_id") == "bondi") && pin->GetBoolean("bondi", "use_gizmo"))){
         // Hyerin (12/19/22) copy over data after initialization
+        
+        if (pin->GetString("parthenon/job", "problem_id") == "resize_restart_kharma") {
+            pmb->par_for("copy_B_restart_resize_kharma", ks, ke, js, je, is, ie,
+                KOKKOS_LAMBDA_3D {
+                    GReal X[GR_DIM];
+                    G.coord(k, j, i, Loci::center, X);
 
-        pmb->par_for("copy_B_restart_resize_kharma", ks, ke, js, je, is, ie,
-            KOKKOS_LAMBDA_3D {
-                GReal X[GR_DIM];
-                G.coord(k, j, i, Loci::center, X);
-
-                if ((!should_fill) && (X[1]<fx1min)) {// if cannot be read from restart file
-                    // do nothing. just use the initialization from SeedBField
-                } else {
-                    // overwrite with the saved values
-                    VLOOP B_U(v, k, j, i) = B_Save(v, k, j, i);
+                    if ((!should_fill) && (X[1]<fx1min)) {// if cannot be read from restart file
+                        // do nothing. just use the initialization from SeedBField
+                    } else {
+                        // overwrite with the saved values
+                        VLOOP B_U(v, k, j, i) = B_Save(v, k, j, i);
+                    }
                 }
-            }
-        );
+            );
+        } else {
+            // HYERIN TODO: only apply it when you have 3d magnetic field data from gizmo.
+            pmb->par_for("copy_B_from_gizmo", ks, ke, js, je, is, ie,
+                KOKKOS_LAMBDA_3D {
+                    GReal X[GR_DIM];
+                    G.coord_embed(k, j, i, Loci::center, X);
+                    
+                    if (X[1]<2){
+                        // HYERIN TODO: change this to r_eh
+                        // do nothing. just use the initialization from SeedBField
+                    } else {
+                        // overwrite with the saved values
+                        VLOOP B_U(v, k, j, i) = B_Save(v, k, j, i);
+                    }
+                }
+            );
+        }
         /*
         if (ndim > 2) {
             printf("WARNING: 3D not supported for resize_restart_kharma!!\n");

@@ -42,6 +42,7 @@
 #include "prob_common.hpp"
 #include "types.hpp"
 #include "hdf5_utils.h"
+#include "b_flux_ct.hpp"
 
 #include <parthenon/parthenon.hpp>
 
@@ -163,7 +164,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const Coordin
     //T = T0 * (r + rb) / r; // use the same analytic temperature solution since T already goes like ~1/r
     u = rho * T * n;
 
-    ucon_bl[3] = uphi * m::pow(r * m::sin(th),-3./2.); // (04/13/23) a fraction of the kepler //*m::sin(th); // 04/04/23 set it to some small angular velocity. smallest at the poles
+    ucon_bl[3] = uphi * m::pow(r, -3./2.) * m::sin(th); // (04/13/23) a fraction of the kepler, smallest at the poles
     Real gcov_bl[GR_DIM][GR_DIM];
     bl.gcov_embed(Xembed, gcov_bl);
     set_ut(gcov_bl, ucon_bl);
@@ -258,7 +259,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const C
         rho = smallrho;
         u = smallu;
         ucon_bl[1] = ur_frac * ur;
-        ucon_bl[3] = uphi * m::pow(r * m::sin(th),-3./2.);
+        ucon_bl[3] = uphi * m::pow(r, -3./2.) * m::sin(th);
     } else {
         XtoindexGizmo(Xembed, rarr, length, itemp, del);
         // linear interpolation
@@ -294,7 +295,10 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell(const GRCoordinates& G, const C
 
 KOKKOS_INLINE_FUNCTION Real frac_diff(const GReal XG[GR_DIM], const GReal x1, const GReal x2, const GReal x3) {
     //Real dx2 = m::pow((x1 - XG[1]) / XG[1], 2.) + m::pow((x2 - XG[2]) / M_PI, 2.) + m::pow((x3 - XG[3]) / (2. * M_PI), 2.);
-    Real dx2 = m::pow((x1 - XG[1]), 2.) + m::pow((x2 - XG[2]) / M_PI, 2.) + m::pow((x3 - XG[3]) / (2. * M_PI), 2.);
+    Real phi_temp;
+    phi_temp = (XG[3] > 2 * M_PI)? XG[3] - 2 * M_PI : XG[3];
+    phi_temp = (phi_temp < 0)? phi_temp + 2 * M_PI : phi_temp;
+    Real dx2 = m::pow((x1 - XG[1]), 2.) + m::pow((x2 - XG[2]) / M_PI, 2.) + m::pow((x3 - phi_temp) / (2. * M_PI), 2.);
     return dx2;
 }
 
@@ -325,6 +329,7 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
             //dx2 = m::pow(coordarr(itemp,0)-XG[1],2.)+m::pow((coordarr(itemp,1)-XG[2])/M_PI,2.)+m::pow((coordarr(itemp,2)-XG[3])/(2.*M_PI),2.);
             dx2 = frac_diff(XG, coordarr(itemp, 0), coordarr(itemp, 1), coordarr(itemp, 2));
 
+
             // simplest interpolation (Hyerin 07/26/22)
             if (dx2<dx2_min){
                 dx2_min=dx2;
@@ -334,7 +339,7 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
     }
     
     // No interpolation! Warn if the data points are not exactly on top of each other
-    if (m::abs(dx2_min)>1.e-8) printf("XtoindexGizmo3D: dx2 frac diff large = %g at (r,th,phi)=(%lf %lf %lf) fitted=(%lf %lf %lf) i = %d \n",m::sqrt(dx2_min), XG[1], XG[2], XG[3], coordarr(i,0),coordarr(i,1),coordarr(i,2), i);
+    if ((m::abs(dx2_min)>1.e-8) && (XG[2] > 0) && (XG[2] < M_PI)) printf("XtoindexGizmo3D: dx2 frac diff large = %g at (r,th,phi)=(%lf %lf %lf) fitted=(%lf %lf %lf) i = %d \n",m::sqrt(dx2_min), XG[1], XG[2], XG[3], coordarr(i,0),coordarr(i,1),coordarr(i,2), i);
 }
 /**
  * Get the GIZMO output values at a particular zone for 3D GIZMO data
@@ -342,27 +347,11 @@ KOKKOS_INLINE_FUNCTION void XtoindexGizmo3D(const GReal XG[GR_DIM],
  * TODO: Hyerin: maybe combine with get_prim_bondi and get_prim_gizmo_shell
  */
 KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell_3d(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P, const VarMap& m_p,
-                                           const Real& gam, const SphBLCoords& bl,  const SphKSCoords& ks, 
-                                           const Real r_shell, const Real ur_frac, const Real uphi_frac, const Real rs, Real vacuum_logrho, Real vacuum_log_u_over_rho,
+                                           const Real& gam, const SphBLCoords& bl,  const SphKSCoords& ks, const Real mdot, const Real rs, 
+                                           const Real r_shell, const Real ur_frac, const Real uphi_frac, Real vacuum_logrho, Real vacuum_log_u_over_rho,
                                            const GridVector& coordarr, const GridScalar& rhoarr, const GridScalar& Tarr, const GridVector& varr, const hsize_t length,
                                            const int& k, const int& j, const int& i)
 {
-    // Solution constants for velocity prescriptions
-    // Ideally these could be cached but preformance isn't an issue here
-    Real mdot = 1.; // mdot and rs defined arbitrarily
-    Real n = 1. / (gam - 1.);
-    Real uc = sqrt(mdot / (2. * rs));
-    Real Vc = -sqrt(pow(uc, 2) / (1. - 3. * pow(uc, 2)));
-    Real Tc = -n * pow(Vc, 2) / ((n + 1.) * (n * pow(Vc, 2) - 1.));
-    Real C1 = uc * pow(rs, 2) * pow(Tc, n);
-    Real C2 = pow(1. + (1. + n) * Tc, 2) * (1. - 2. * mdot / rs + pow(C1, 2) / (pow(rs, 4) * pow(Tc, 2 * n)));
-
-    Real smallrho=pow(10.,vacuum_logrho); // pow(10.,-4.);
-    Real smallu = smallrho*pow(10.,vacuum_log_u_over_rho);
-
-    //Real T = smallu/(smallrho*n);
-
-    //Real rs = 1./sqrt(T); //1000.;
     GReal Xnative[GR_DIM], Xembed[GR_DIM];//, Xembed_corner[GR_DIM];
     G.coord(k, j, i, Loci::center, Xnative);
     G.coord_embed(k, j, i, Loci::center, Xembed);
@@ -370,54 +359,134 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell_3d(const GRCoordinates& G, cons
     GReal r = Xembed[1];
     GReal th = Xembed[2];
 
-    Real rho, u, T, ur, uth, uphi;
-    int itemp;
-    GReal del;
-
-    // Unless we're doing a Schwarzchild problem & comparing solutions,
-    // be a little cautious about initializing the Ergosphere zones
-    if (ks.a > 0.1 && r < 2) return;
-
-    T = get_T(r, C1, C2, n, rs);
-    ur = -C1 / (pow(T, n) * pow(r, 2));
-    Real ucon_bl[GR_DIM] = {0, 0, 0, 0};
     if (r<r_shell*0.9){
-        rho = smallrho;
-        u = smallu;
-        ucon_bl[1] = ur_frac * ur;
-        ucon_bl[3] = uphi_frac * m::pow(r * m::sin(th), -3./2.);
+        //rho = smallrho;
+        //u = smallu;
+        //ucon_bl[1] = ur_frac * ur;
+        //ucon_bl[3] = uphi_frac * m::pow(r, -3./2.) * m::sin(th);
+        // leave it to get_prim_bondi
+        get_prim_bondi(G, coords, P, m_p, gam, bl, ks, mdot, rs, ur_frac, uphi_frac, k, j, i);
     } else {
-        XtoindexGizmo3D(Xembed, coordarr, length, itemp, del);
-        // DO NOT INTERPOLATE, it is assumed GIZMO data is right on the grid
-        rho = rhoarr(itemp);
-        u = rho * (Tarr(itemp)) * n;
-        ur = varr(itemp, 0);
-        uth = varr(itemp, 1) / r;
-        uphi = varr(itemp, 2) / (r * m::sin(th));
-        // Newtonian limit
-        ucon_bl[1] = ur;
-        ucon_bl[2] = uth;
-        ucon_bl[3] = uphi;
+        // Solution constants for velocity prescriptions
+        // Ideally these could be cached but preformance isn't an issue here
+        Real mdot = 1.; // mdot and rs defined arbitrarily
+        Real n = 1. / (gam - 1.);
+        Real uc = sqrt(mdot / (2. * rs));
+        Real Vc = -sqrt(pow(uc, 2) / (1. - 3. * pow(uc, 2)));
+        Real Tc = -n * pow(Vc, 2) / ((n + 1.) * (n * pow(Vc, 2) - 1.));
+        Real C1 = uc * pow(rs, 2) * pow(Tc, n);
+        Real C2 = pow(1. + (1. + n) * Tc, 2) * (1. - 2. * mdot / rs + pow(C1, 2) / (pow(rs, 4) * pow(Tc, 2 * n)));
+
+        //Real smallrho=pow(10.,vacuum_logrho); // pow(10.,-4.);
+        //Real smallu = smallrho*pow(10.,vacuum_log_u_over_rho);
+        Real rho, u, T, ur, uth, uphi;
+        int itemp;
+        GReal del;
+
+
+        // Unless we're doing a Schwarzchild problem & comparing solutions,
+        // be a little cautious about initializing the Ergosphere zones
+        if (ks.a > 0.1 && r < 2) return;
+        
+        // also careful when initializing near the horizon
+        if (r < 2) get_prim_bondi(G, coords, P, m_p, gam, bl, ks, mdot, rs, ur_frac, uphi_frac, k, j, i);
+        else {
+            T = get_T(r, C1, C2, n, rs);
+            ur = -C1 / (pow(T, n) * pow(r, 2));
+            Real ucon_bl[GR_DIM] = {0, 0, 0, 0};
+
+
+            XtoindexGizmo3D(Xembed, coordarr, length, itemp, del);
+            // DO NOT INTERPOLATE, it is assumed GIZMO data is right on the grid
+            rho = rhoarr(itemp);
+            u = rho * (Tarr(itemp)) * n;
+            ur = varr(itemp, 0);
+            uth = varr(itemp, 1) / r;
+            uphi = varr(itemp, 2) / (r * m::sin(th));
+            // Newtonian limit
+            ucon_bl[1] = ur;
+            ucon_bl[2] = uth;
+            ucon_bl[3] = uphi;
+
+            // Set u^t to make u^r a 4-vector
+            Real gcov_bl[GR_DIM][GR_DIM];
+            bl.gcov_embed(Xembed, gcov_bl);
+            set_ut(gcov_bl, ucon_bl);
+
+            // Then transform that 4-vector to KS, then to native
+            Real ucon_ks[GR_DIM], ucon_mks[GR_DIM];
+            ks.vec_from_bl(Xembed, ucon_bl, ucon_ks);
+            coords.con_vec_to_native(Xnative, ucon_ks, ucon_mks);
+
+            // Convert native 4-vector to primitive u-twiddle, see Gammie '04
+            Real gcon[GR_DIM][GR_DIM], u_prim[NVEC];
+            G.gcon(Loci::center, j, i, gcon);
+            fourvel_to_prim(gcon, ucon_mks, u_prim);
+
+            P(m_p.RHO, k, j, i) = rho;
+            P(m_p.UU, k, j, i) = u;
+            P(m_p.U1, k, j, i) = u_prim[0];
+            P(m_p.U2, k, j, i) = u_prim[1];
+            P(m_p.U3, k, j, i) = u_prim[2];
+        }
     }
 
-    // Set u^t to make u^r a 4-vector
-    Real gcov_bl[GR_DIM][GR_DIM];
-    bl.gcov_embed(Xembed, gcov_bl);
-    set_ut(gcov_bl, ucon_bl);
+}
 
-    // Then transform that 4-vector to KS, then to native
-    Real ucon_ks[GR_DIM], ucon_mks[GR_DIM];
-    ks.vec_from_bl(Xembed, ucon_bl, ucon_ks);
-    coords.con_vec_to_native(Xnative, ucon_ks, ucon_mks);
 
-    // Convert native 4-vector to primitive u-twiddle, see Gammie '04
-    Real gcon[GR_DIM][GR_DIM], u_prim[NVEC];
-    G.gcon(Loci::center, j, i, gcon);
-    fourvel_to_prim(gcon, ucon_mks, u_prim);
+KOKKOS_INLINE_FUNCTION void get_B_gizmo_shell_3d(const GRCoordinates& G, const CoordinateEmbedding& coords, const VariablePack<Real>& P,
+                   const SphBLCoords& bl,  const SphKSCoords& ks, const Real r_shell, 
+                   const GridVector& coordarr, const GridVector& varr, const GridVector& B, const GridVector& B_save, const hsize_t length,
+                   const int& k, const int& j, const int& i)
+{
+    //Real B_cons[NVEC];
+    GReal Xnative[GR_DIM], Xembed[GR_DIM];
+    G.coord(k, j, i, Loci::center, Xnative);
+    G.coord_embed(k, j, i, Loci::center, Xembed);
+    GReal r = Xembed[1];
+    GReal th = Xembed[2];
 
-    P(m_p.RHO, k, j, i) = rho;
-    P(m_p.UU, k, j, i) = u;
-    P(m_p.U1, k, j, i) = u_prim[0];
-    P(m_p.U2, k, j, i) = u_prim[1];
-    P(m_p.U3, k, j, i) = u_prim[2];
+    int itemp;
+    GReal del;
+    
+    if (r<r_shell*0.9){
+        // don't do anything and wait for seed_B
+    } else {
+        XtoindexGizmo3D(Xembed, coordarr, length, itemp, del);
+        //VLOOP B_save(v, k, j, i) = B(itemp, v) * G.gdet(Loci::center, j, i); // convert to B_U
+        
+        // First get velocities in embedded coordinates, taking Newtonian approximation
+        Real ucon_embed[GR_DIM], ucov_embed[GR_DIM], gcov_ks[GR_DIM][GR_DIM], ucon_native[GR_DIM];
+        ucon_embed[1] = varr(itemp, 0);
+        ucon_embed[2] = varr(itemp, 1) / r;
+        ucon_embed[3] = varr(itemp, 2) / (r * m::sin(th));
+        ks.gcov_embed(Xembed, gcov_ks); // gcov_embed
+        set_ut(gcov_ks, ucon_embed); // Set u^t to make a 4-vector
+        DLOOP1 ucov_embed[mu] = 0.;
+        DLOOP2 ucov_embed[mu] += gcov_ks[mu][nu] * ucon_embed[nu]; // lower
+        coords.con_vec_to_native(Xnative, ucon_embed, ucon_native); // prepare ucon_native for later use
+
+        // make magnetic fields into a four-vector
+        Real B_embed[NVEC], B_native[NVEC], bcon_embed[GR_DIM], bcov_ks[GR_DIM], bcon_native[GR_DIM];
+        //VLOOP B_embed[v] = B(itemp, v);
+        B_embed[0] = B(itemp, 0);
+        B_embed[1] = B(itemp, 1) / r;
+        B_embed[2] = B(itemp, 2) / (r * m::sin(th));
+        bcon_embed[0] = 0;
+        VLOOP bcon_embed[0] += B_embed[v] * ucov_embed[v+1];
+        VLOOP bcon_embed[v+1] = (B_embed[v] + bcon_embed[0] * ucon_embed[v+1]) / ucon_embed[0];
+
+        // convert into native coordinates
+        coords.con_vec_to_native(Xnative, bcon_embed, bcon_native);
+
+        // convert the 4-vector into 3-vector
+        VLOOP B_native[v] = bcon_native[v+1] * ucon_native[0] - bcon_native[0] * ucon_native[v+1];
+        
+        // save it into B_Save in conserved quantity
+        //if (j==5 && k == 5) printf("HYERIN: i=%d data = (%.3g, %.3g, %.3g) and native (%.3g, %.3g, %.3g)\n",
+        //                            i, B_embed[0], B_embed[1], B_embed[2],
+        //                               B_native[0], B_native[1], B_native[2]);
+        VLOOP B_save(v, k, j, i) = B_native[v] * G.gdet(Loci::center, j, i); // convert to B_U
+    }
+
 }

@@ -512,11 +512,11 @@ void CalcDivB(MeshData<Real> *md, std::string divb_field_name)
     for (int b = block.s; b <= block.e; ++b) {
         auto pmb = md->GetBlockData(b)->GetBlockPointer().get();
 
-        const int is = IsDomainBound(pmb, BoundaryFace::inner_x1) ? ib.s + 1 : ib.s;
-        const int ie = IsDomainBound(pmb, BoundaryFace::outer_x1) ? ib.e : ib.e + 1;
-        const int js = IsDomainBound(pmb, BoundaryFace::inner_x2) ? jb.s + 1 : jb.s;
-        const int je = IsDomainBound(pmb, BoundaryFace::outer_x2) ? jb.e : jb.e + 1;
-        const int ks = (IsDomainBound(pmb, BoundaryFace::inner_x3) && ndim > 2) ? kb.s + 1 : kb.s;
+        const int is = IsDomainBound(pmb, BoundaryFace::inner_x1) ? ib.s : ib.s;
+        const int ie = IsDomainBound(pmb, BoundaryFace::outer_x1) ? ib.e + 1 : ib.e + 1;
+        const int js = IsDomainBound(pmb, BoundaryFace::inner_x2) ? jb.s : jb.s;
+        const int je = IsDomainBound(pmb, BoundaryFace::outer_x2) ? jb.e + 1 : jb.e + 1;
+        const int ks = (IsDomainBound(pmb, BoundaryFace::inner_x3) && ndim > 2) ? kb.s : kb.s;
         const int ke = (IsDomainBound(pmb, BoundaryFace::outer_x3) || ndim <= 2) ? kb.e : kb.e + 1;
 
         pmb->par_for("calc_divB", ks, ke, js, je, is, ie,

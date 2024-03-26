@@ -303,16 +303,17 @@ def run_multizone(**kwargs):
                 # double the runtime for the outermost annulus
                 runtime *= 2
             if args["coordinates/r_in"] < 2:
-                args["bounds/check_inflow_inner"] = 1
                 if (not kwargs['one_trun']): runtime *= 2  # double the runtime for innermost annulus
                 if kwargs["long_t_in"]:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
                     runtime *= float(kwargs["long_t_in_factor"])  # 5 tff at the log middle radius (by default)
                     if kwargs['one_trun']: runtime *= 2 # compensate one_trun here (TODO: this should actually not be done!)
-            else:
-                args["bounds/check_inflow_inner"] = 0
         else:
             runtime = float(kwargs["tlim"])
+        if args["coordinates/r_in"] < 2:
+            args["bounds/check_inflow_inner"] = 1
+        else:
+            args["bounds/check_inflow_inner"] = 0
 
         if kwargs["half_trun"]: runtime /= 2
 
@@ -426,7 +427,7 @@ def update_args(run_num, kwargs, args):
         if kwargs["rst_from_oz_file"] is None: 
             # only clean first two runs
             stop_clean = 1
-        else: stop_clean = nzones_eff - 1
+        else: stop_clean = kwargs["nzones_eff"] - 1
         if run_num >= stop_clean: args["b_field/initial_cleanup"] = 0
         #args["b_cleanup/rel_tolerance"] = 1.e-2 # relax the constraint
 
@@ -465,8 +466,8 @@ def update_args(run_num, kwargs, args):
         fname_fill = glob.glob(fname_fill_dir + "/*final.rhdf")[0]
         args["perturbation/u_jitter"] = 0.0  # jitter is turned off when not initializing.
     args["resize_restart/fname"] = fname
-    if kwargs["rst_from_oz_file"] is None: args["resize_restart/fname_fill"] = fname_fill
-    else: args["resize_restart/fname_fill"] = kwargs["rst_from_oz_file"]
+    if kwargs["rst_from_oz_file"] is not None and run_num + 1 < kwargs["nzones_eff"]: args["resize_restart/fname_fill"] = kwargs["rst_from_oz_file"]
+    else: args["resize_restart/fname_fill"] = fname_fill
 
 
 if __name__ == "__main__":

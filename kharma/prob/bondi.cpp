@@ -53,6 +53,7 @@ TaskStatus InitializeBondi(MeshBlockData<Real> *rc, ParameterInput *pin)
     const Real uphi = pin->GetOrAddReal("bondi", "uphi", 0.); 
     const Real vacuum_logrho = pin->GetOrAddReal("bondi", "vacuum_logrho", 0.); 
     const Real vacuum_log_u_over_rho = pin->GetOrAddReal("bondi", "vacuum_log_u_over_rho", 0.); 
+    auto b_field_type = pin->GetOrAddString("b_field", "type", "none");
 
     // Add these to package properties, since they continue to be needed on boundaries
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("mdot")))
@@ -73,6 +74,8 @@ TaskStatus InitializeBondi(MeshBlockData<Real> *rc, ParameterInput *pin)
         pmb->packages.Get("GRMHD")->AddParam<Real>("vacuum_logrho", vacuum_logrho);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("vacuum_log_u_over_rho")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("vacuum_log_u_over_rho", vacuum_log_u_over_rho);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("b_field_type")))
+        pmb->packages.Get("GRMHD")->AddParam<std::string>("b_field_type", b_field_type);
 
     // Set the whole domain to the analytic solution to begin
     SetBondi(rc);
@@ -101,6 +104,10 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
     const Real uphi = pmb->packages.Get("GRMHD")->Param<Real>("uphi");
     Real vacuum_logrho = pmb->packages.Get("GRMHD")->Param<Real>("vacuum_logrho");
     Real vacuum_log_u_over_rho = pmb->packages.Get("GRMHD")->Param<Real>("vacuum_log_u_over_rho");
+    auto b_field_type = pmb->packages.Get("GRMHD")->Param<std::string>("b_field_type");
+    const bool include_B = (b_field_type != "none");
+    GridVector B_Save;
+    if (include_B) B_Save = rc->Get("B_Save").data;
 
     // Just the X1 right boundary
     GRCoordinates G = pmb->coords;
@@ -213,6 +220,7 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             Real *rhoarr = new double[length];
             Real *Tarr = new double[length];
             Real *varr = new double[length*3];
+            Real *Barr = new double[length*3];
             static hsize_t fdims_vec[] = {length, 3};
             static hsize_t fdims_scl[] = {length};
             hsize_t fstart_vec[] = {0, 0};
@@ -221,6 +229,7 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             hdf5_read_array(rhoarr, "PartType0_dimless/Density", 1, fdims_scl, fstart_scl,fdims_scl,fdims_scl,fstart_scl,H5T_IEEE_F64LE);
             hdf5_read_array(Tarr, "PartType0_dimless/Temperature", 1, fdims_scl, fstart_scl,fdims_scl,fdims_scl,fstart_scl,H5T_IEEE_F64LE);
             hdf5_read_array(varr, "PartType0_dimless/Velocities", 2, fdims_vec, fstart_vec,fdims_vec,fdims_vec,fstart_vec,H5T_IEEE_F64LE);
+            if (include_B) hdf5_read_array(Barr, "PartType0_dimless/MagneticFields", 2, fdims_vec, fstart_vec,fdims_vec,fdims_vec,fstart_vec,H5T_IEEE_F64LE);
             hdf5_close();
 
             // save in a device arrays
@@ -228,16 +237,19 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             GridScalar rho_device("rho_device", length); 
             GridScalar T_device("rho_device", length); 
             GridVector v_device("v_device", length, 3); 
+            GridVector B_device("B_device", length, 3); 
             auto coord_host = coord_device.GetHostMirror();
             auto rho_host = rho_device.GetHostMirror();
             auto T_host = T_device.GetHostMirror();
             auto v_host = v_device.GetHostMirror();
+            auto B_host = B_device.GetHostMirror();
             int vector_file_index;
             for (int itemp = 0; itemp < length; itemp++) {
                 for (int ltemp = 0; ltemp < 3; ltemp++) {
                     vector_file_index = 3*itemp+ltemp;
                     coord_host(itemp,ltemp) = coordarr[vector_file_index];
                     v_host(itemp,ltemp) = varr[vector_file_index];
+                    if (include_B) B_host(itemp,ltemp) = Barr[vector_file_index];
                 }
                 rho_host(itemp) = rhoarr[itemp];
                 T_host(itemp) = Tarr[itemp];
@@ -246,12 +258,13 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             rho_device.DeepCopy(rho_host);
             T_device.DeepCopy(T_host);
             v_device.DeepCopy(v_host);
+            if (include_B) B_device.DeepCopy(B_host);
                 
             Kokkos::fence();
 
             int i_sh=0; // TODO! Ask Ben
 
-            pmb->par_for("gizmo_shell", kb.s, kb.e, jb.s, jb.e, ibs, ibe,
+            pmb->par_for("gizmo_shell", kb_e.s, kb_e.e, jb_e.s, jb_e.e, ibs, ibe,
                 KOKKOS_LAMBDA_3D {
                     //Real vacuum_rho, vacuum_u_over_rho; //, vacuum_logrho, vacuum_log_u_over_rho;
                     
@@ -262,10 +275,13 @@ TaskStatus SetBondi(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     //    vacuum_log_u_over_rho = log10(vacuum_u_over_rho);
                     //}
 
-                    get_prim_gizmo_shell_3d(G, cs, P, m_p, gam, bl, ks, r_shell, ur_frac, uphi, rs, vacuum_logrho, vacuum_log_u_over_rho, 
+                    get_prim_gizmo_shell_3d(G, cs, P, m_p, gam, bl, ks, mdot, rs, r_shell, ur_frac, uphi, vacuum_logrho, vacuum_log_u_over_rho, 
                                           coord_device, rho_device, T_device, v_device, length, k, j, i);
                     // TODO all flux
                     GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u);
+
+                    if (include_B)
+                        get_B_gizmo_shell_3d(G, cs, P, bl, ks, r_shell, coord_device, v_device, B_device, B_Save, length, k, j, i);
                 }
             );
         }
