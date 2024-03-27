@@ -289,9 +289,14 @@ TaskCollection KHARMADriver::MakeDefaultTaskCollection(BlockList_t &blocks, int 
         if (use_b_ct) {
             auto& grmhd_pkg = pkgs.at("GRMHD")->AllParams();
             bool derefine_poles = grmhd_pkg.Get<bool>("ismr_poles");
+            int nlevels = grmhd_pkg.Get<int>("ismr_nlevels");
             if (derefine_poles) {
-                auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
-                t_step_done = tl.AddTask(t_derefine_poles, Packages::MeshUtoP, md_sub_step_final.get(), IndexDomain::entire, false);
+                if (nlevels > 0) {
+                    auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get(), nlevels);
+                    t_step_done = tl.AddTask(t_derefine_poles, Packages::MeshUtoP, md_sub_step_final.get(), IndexDomain::entire, false);
+                } else {
+                    printf("WARNING: internal SMR near the poles is requested, but the number of levels should be >= 1. Not operating internal SMR.\n");
+                }
             }
         }
 
