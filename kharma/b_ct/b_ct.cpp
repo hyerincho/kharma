@@ -544,17 +544,19 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
             //auto j_c = (binner) ? j_f : j_f - 1; // last physical cell
             int offset = (binner) ? 1 : -1; // offset to read the physical face values
             int point_out = offset; // if F2 B field at j_f + offset face is positive when pointing out of the cell, +1.
-            const IndexRange j_p = IndexRange{(binner) ? j_f : j_f - (nlevels - 1), (binner) ? j_f + (nlevels - 1) : j_f}; // layers near the poles to be derefined
-
-            pmb0->par_for("B_CT_derefine_poles", block.s, block.e, bF1.ks, bF1.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
+            // layers near the poles to be derefined
+            int jps = (binner) ? j_f : j_f - (nlevels - 1);
+            int jpe = (binner) ? j_f + (nlevels - 1) : j_f;
+            //const IndexRange j_p = IndexRange{(binner) ? j_f : j_f - (nlevels - 1), (binner) ? j_f + (nlevels - 1) : j_f}; 
+            pmb0->par_for("B_CT_derefine_poles", block.s, block.e, bF1.ks, bF1.ke, jps, jpe, bF1.is, bF1.ie,
                 KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
                     const auto& G = B_U.GetCoords(bl);
                     
                     // F2: The two fine cells have 0 fluxes through the physical-ghost boundaries.
                     if (j == j_f) B_U(bl)(F2, 0, k, j, i) = 0.; 
                     
-                    uint coarse_cell_len = 2 * (((binner) ? j - j_f : j_f - j) + 1);
-                    uint c_half = coarse_cell_len / 2; // half of the coarse cell's length
+                    int coarse_cell_len = 2 * (((binner) ? j - j_f : j_f - j) + 1);
+                    int c_half = coarse_cell_len / 2; // half of the coarse cell's length
                     if (k % coarse_cell_len == 0) {
                         // F1: just average over the two fine cells
                         //Real avg = (B_U(bl)(F1, 0, k, j_c, i) * G.Volume<F1>(k, j_c, i) + 
