@@ -519,7 +519,7 @@ void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
     );
 }
 
-TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, int nlevels)
+TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
 {
     // HYERIN (01/17/24) this routine is not general yet and only applies to polar boundaries for now.
     auto B_U = md->PackVariables(std::vector<std::string>{"cons.fB"});
@@ -553,8 +553,8 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, int nlevels)
                     // F2: The two fine cells have 0 fluxes through the physical-ghost boundaries.
                     if (j == j_f) B_U(bl)(F2, 0, k, j, i) = 0.; 
                     
-                    int coarse_cell_len = 2 * (((binner) ? j - j_f : j_f - j) + 1);
-                    int c_half = coarse_cell_len / 2; // half of the coarse cell's length
+                    uint coarse_cell_len = 2 * (((binner) ? j - j_f : j_f - j) + 1);
+                    uint c_half = coarse_cell_len / 2; // half of the coarse cell's length
                     if (k % coarse_cell_len == 0) {
                         // F1: just average over the two fine cells
                         //Real avg = (B_U(bl)(F1, 0, k, j_c, i) * G.Volume<F1>(k, j_c, i) + 

@@ -289,7 +289,7 @@ TaskCollection KHARMADriver::MakeDefaultTaskCollection(BlockList_t &blocks, int 
         if (use_b_ct) {
             auto& grmhd_pkg = pkgs.at("GRMHD")->AllParams();
             bool derefine_poles = grmhd_pkg.Get<bool>("ismr_poles");
-            int nlevels = grmhd_pkg.Get<int>("ismr_nlevels");
+            uint nlevels = grmhd_pkg.Get<uint>("ismr_nlevels");
             if (derefine_poles) {
                 if (nlevels > 0) {
                     auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get(), nlevels);

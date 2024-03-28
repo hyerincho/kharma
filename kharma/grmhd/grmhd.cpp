@@ -122,7 +122,7 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // internal SMR :Added by Hyerin (03/07/24)
     bool ismr_poles = pin->GetOrAddBoolean("GRMHD", "ismr_poles", false);
     params.Add("ismr_poles", ismr_poles);
-    int ismr_nlevels = pin->GetOrAddInteger("GRMHD", "ismr_nlevels", 1);
+    uint ismr_nlevels = (uint) pin->GetOrAddInteger("GRMHD", "ismr_nlevels", 1);
     params.Add("ismr_nlevels", ismr_nlevels);
 
     // =================================== FIELDS ===================================
