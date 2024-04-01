@@ -198,7 +198,6 @@ def run_multizone(**kwargs):
             args["b_field/type"] = kwargs["btype"]  # "r1s2" #"vertical"
             if (kwargs["b_ct"]): args["b_field/solver"] = "face_ct"
             else: args["b_field/solver"] = "flux_ct"
-            if (kwargs["derefine_poles"]): args["b_field/derefine_poles"] = 1
             args["b_field/A0"] = kwargs["bz"]
             if kwargs["bclean"]:
                 args["b_field/initial_cleanup"] = 1
@@ -244,6 +243,7 @@ def run_multizone(**kwargs):
             if 'lower' in kwargs["recon"]: kwargs["recon"] = "weno5"
             args["driver/reconstruction"] = kwargs["recon"]
         args["GRMHD/gamma"] = kwargs["gamma"]
+        if (kwargs["derefine_poles"]): args["GRMHD/ismr_poles"] = 1
         args["floors/rho_min_geom"] = kwargs["rhomin"]
         args["floors/u_min_geom"] = kwargs["umin"]
 
