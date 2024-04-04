@@ -118,6 +118,7 @@ def calc_rb(kwargs):
 @click.option("--bclean", is_flag=True, help="Clean divergence of B fields.")
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
 @click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
+@click.option("--derefine_nlevels", default=1, help="Derefine number of levels for internal SMR.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -243,7 +244,9 @@ def run_multizone(**kwargs):
             if 'lower' in kwargs["recon"]: kwargs["recon"] = "weno5"
             args["driver/reconstruction"] = kwargs["recon"]
         args["GRMHD/gamma"] = kwargs["gamma"]
-        if (kwargs["derefine_poles"]): args["GRMHD/ismr_poles"] = 1
+        if (kwargs["derefine_poles"]): 
+            args["GRMHD/ismr_poles"] = 1
+            args["GRMHD/ismr_nlevels"] = kwargs["derefine_nlevels"]
         args["floors/rho_min_geom"] = kwargs["rhomin"]
         args["floors/u_min_geom"] = kwargs["umin"]
 
