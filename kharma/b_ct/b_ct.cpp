@@ -552,6 +552,7 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
             j_f = (binner) ? bF2.je : bF2.js; // last physical face
             jps = (binner) ? j_f + (nlevels - 1) : j_f - (nlevels - 1); // start of the lowest level of derefinement
             const IndexRange j_p = IndexRange{(binner) ? j_f : jps, (binner) ? jps : j_f};  // Range of x2 to be de-refined
+            offset = (binner) ? 1 : -1; // offset to read the physical face values
 
             // F1 average
             pmb0->par_for("B_CT_derefine_poles_avg_F1", block.s, block.e, bCC.ks, bCC.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
@@ -608,34 +609,35 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                     current_lv = ((binner) ? jps - j : j - jps); // the current level of derefinement at given j
                     c_half = m::pow(2, current_lv); // half of the coarse cell's length
                     coarse_cell_len = 2 * c_half;
-                    avg = 0.;
                     j_c = j + ((binner) ? 0 : -1); // cell center
                     k_fine = k % coarse_cell_len; // this fine cell's k-index within the coarse cell
                     k_start = k - k_fine; // starting k-index of the coarse cell
                     k_half = k_start + c_half;
                     k_end  = k_start + coarse_cell_len; // end k-index of the coarse cell
                     
-                    // F3: The internal faces will take care of the divB=0. The two faces of the coarse cell will remain unchanged.
-                    //// First calculate the very central internal face. In other words, deal with the highest level internal face first.
-                    //// Sum of F2 fluxes in the left and right half of the coarse cell each. 
-                    Real c_left_v = 0., c_right_v = 0.;
-                    for (int ktemp = 0; ktemp < c_half; ++ktemp) {
-                        c_left_v += B_U(bl)(F2, 0, k_half -1 - ktemp, j + offset, i) * G.Volume<F2>(k_half - 1 - ktemp, j + offset, i);
-                        c_right_v += B_U(bl)(F2, 0, k_half   + ktemp, j + offset, i) * G.Volume<F2>(k_half     + ktemp, j + offset, i);
-                    }
-                    B_start = B_U(bl)(F3, 0, k_start, j_c, i) * G.Volume<F3>(k_start, j_c, i);
-                    B_end   = B_U(bl)(F3, 0, k_end,   j_c, i) * G.Volume<F3>(k_end,   j_c, i);
-                    B_center = (B_start + B_end + point_out * (c_right_v - c_left_v)) / 2.;
-                    if (k == 8 && i ==8 && j == j_f) printf("HYERIN: F3 internal %.3g\n", B_center);
-                    
                     if (k % coarse_cell_len == 0) { // at the faces of the coarse cells. Don't modify them.
                         B_avg(bl)(F3, 0, k, j_c, i) = B_U(bl)(F3, 0, k, j_c, i);
-                    } else if (k == k_half) { // if at the center, then store the calculated value.
-                        B_avg(bl)(F3, 0, k, j_c, i) = B_center / G.Volume<F3>(k, j_c, i);
-                    } else if (k < k_half) { // interpolate between B_start and B_center
-                        B_avg(bl)(F3, 0, k, j_c, i) = ((c_half - k_fine) * B_start + k_fine * B_center) / (c_half * G.Volume<F3>(k, j_c, i));
-                    } else if (k > k_half) { // interpolate between B_end and B_center
-                        B_avg(bl)(F3, 0, k, j_c, i) = ((k_fine - c_half) * B_end + (coarse_cell_len - k_fine) * B_center) / (c_half * G.Volume<F3>(k, j_c, i));
+                    else {
+                        // F3: The internal faces will take care of the divB=0. The two faces of the coarse cell will remain unchanged.
+                        //// First calculate the very central internal face. In other words, deal with the highest level internal face first.
+                        //// Sum of F2 fluxes in the left and right half of the coarse cell each. 
+                        Real c_left_v = 0., c_right_v = 0.;
+                        for (int ktemp = 0; ktemp < c_half; ++ktemp) {
+                            c_left_v += B_U(bl)(F2, 0, k_half -1 - ktemp, j + offset, i) * G.Volume<F2>(k_half - 1 - ktemp, j + offset, i);
+                            c_right_v += B_U(bl)(F2, 0, k_half   + ktemp, j + offset, i) * G.Volume<F2>(k_half     + ktemp, j + offset, i);
+                        }
+                        B_start = B_U(bl)(F3, 0, k_start, j_c, i) * G.Volume<F3>(k_start, j_c, i);
+                        B_end   = B_U(bl)(F3, 0, k_end,   j_c, i) * G.Volume<F3>(k_end,   j_c, i);
+                        B_center = (B_start + B_end + point_out * (c_right_v - c_left_v)) / 2.;
+                        if (k == 8 && i ==8 && j == j_f) printf("HYERIN: F3 internal %.3g\n", B_center);
+                        
+                        if (k == k_half) { // if at the center, then store the calculated value.
+                            B_avg(bl)(F3, 0, k, j_c, i) = B_center / G.Volume<F3>(k, j_c, i);
+                        } else if (k < k_half) { // interpolate between B_start and B_center
+                            B_avg(bl)(F3, 0, k, j_c, i) = ((c_half - k_fine) * B_start + k_fine * B_center) / (c_half * G.Volume<F3>(k, j_c, i));
+                        } else if (k > k_half) { // interpolate between B_end and B_center
+                            B_avg(bl)(F3, 0, k, j_c, i) = ((k_fine - c_half) * B_end + (coarse_cell_len - k_fine) * B_center) / (c_half * G.Volume<F3>(k, j_c, i));
+                        }
                     }
                 }
             );
