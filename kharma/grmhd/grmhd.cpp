@@ -173,10 +173,13 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     m = Metadata(flags_cons);
     pkg->AddField("cons.rho", m);
     pkg->AddField("cons.u", m);
+    pkg->AddField("ismr_rho_avg", m);
+    pkg->AddField("ismr_u_avg", m);
     auto flags_cons_vec(flags_cons);
     flags_cons_vec.push_back(Metadata::Vector);
     m = Metadata(flags_cons_vec, s_vector);
     pkg->AddField("cons.uvec", m);
+    pkg->AddField("ismr_uvec_avg", m);
 
     // No magnetic fields here. KHARMA should operate fine in GRHD without them,
     // so they are allocated only by B field packages.
@@ -224,6 +227,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
 
     // Added by Hyerin (03/07/24)
     bool ismr_poles = grmhd_pars.Get<bool>("ismr_poles");
+    uint ismr_nlevels = grmhd_pars.Get<uint>("ismr_nlevels");
 
     if (!globals.Get<bool>("in_loop")) {
         if (grmhd_pars.Get<bool>("start_dt_light") ||
@@ -263,10 +267,13 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     pmb->par_reduce("ndt_min", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int k, const int j, const int i,
                       Real &local_result) {
-            bool take_larger_steps = (ismr_poles) && ((j == jb.s) || (j == jb.e));
+            //bool take_larger_steps = (ismr_poles) && ((j == jb.s) || (j == jb.e));
+            int ismr_factor = 1;
+            if (j < jb.s + ismr_nlevels) ismr_factor = m::pow(2, jb.s + ismr_nlevels - j);
+            if (j > jb.e - ismr_nlevels) ismr_factor = m::pow(2, j - jb.e + ismr_nlevels);
             double ndt_zone = 1 / (1 / (G.Dxc<1>(i) /  m::max(cmax(0, k, j, i), cmin(0, k, j, i))) +
                                    1 / (G.Dxc<2>(j) /  m::max(cmax(1, k, j, i), cmin(1, k, j, i))) +
-                                   1 / (G.Dxc<3>(k) * (take_larger_steps? 2 : 1) /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
+                                   1 / (G.Dxc<3>(k) * ismr_factor /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
 
             if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
                 local_result = ndt_zone;

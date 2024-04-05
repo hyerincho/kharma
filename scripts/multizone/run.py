@@ -119,6 +119,7 @@ def calc_rb(kwargs):
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
 @click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
 @click.option("--derefine_nlevels", default=1, help="Derefine number of levels for internal SMR.")
+@click.option("--output0_dt", default=None, help="output0 dt.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -335,7 +336,8 @@ def run_multizone(**kwargs):
         # Output timing (TODO make options)
         if kwargs["onezone"]:
             runtime = calc_runtime(r_out, r_b, False) # 1-zone will only be run with smaller Bondi problem where trun is capped.
-        args["parthenon/output0/dt"] = max((runtime / 10.0), 1e-7)
+        if kwargs["output0_dt"] is None: args["parthenon/output0/dt"] = max((runtime / 10.0), 1e-7)
+        else: args["parthenon/output0/dt"] = float(kwargs["output0_dt"])
         args["parthenon/output1/dt"] = max((runtime / 5.0), 1e-7)  #
         args["parthenon/output2/dt"] = runtime / 10  # 0.
 
