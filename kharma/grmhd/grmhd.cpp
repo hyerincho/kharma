@@ -269,8 +269,10 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
                       Real &local_result) {
             //bool take_larger_steps = (ismr_poles) && ((j == jb.s) || (j == jb.e));
             int ismr_factor = 1;
-            if (j < jb.s + ismr_nlevels) ismr_factor = m::pow(2, jb.s + ismr_nlevels - j);
-            if (j > jb.e - ismr_nlevels) ismr_factor = m::pow(2, j - jb.e + ismr_nlevels);
+            if (ismr_poles) {
+                if (j < jb.s + ismr_nlevels) ismr_factor = m::pow(2, jb.s + ismr_nlevels - j);
+                if (j > jb.e - ismr_nlevels) ismr_factor = m::pow(2, j - jb.e + ismr_nlevels);
+            }
             double ndt_zone = 1 / (1 / (G.Dxc<1>(i) /  m::max(cmax(0, k, j, i), cmin(0, k, j, i))) +
                                    1 / (G.Dxc<2>(j) /  m::max(cmax(1, k, j, i), cmin(1, k, j, i))) +
                                    1 / (G.Dxc<3>(k) * ismr_factor /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));

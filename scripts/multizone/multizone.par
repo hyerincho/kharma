@@ -92,6 +92,7 @@ u_jitter=0
 type = none
 solver = none
 fix_flux_x1 = true
+kill_on_divb_over = 0.1
 
 <b_cleanup>
 output_before_cleanup = true
@@ -114,7 +115,7 @@ max_nonlinear_iter = 3
 <parthenon/output0>
 file_type = hdf5
 dt = 528968040
-single_precision_output = false
+single_precision_output = true
 variables = prims.rho, prims.u, prims.uvec, prims.B, cons.fB, fflag, pflag, divB
 ghost_zones = true
 
