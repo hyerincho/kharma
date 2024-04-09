@@ -118,8 +118,10 @@ def calc_rb(kwargs):
 @click.option("--bclean", is_flag=True, help="Clean divergence of B fields.")
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
 @click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
+@click.option("--derefine_nlevels", default=1, help="Derefine number of levels for internal SMR.")
 @click.option("--no_fofc", is_flag=True, help="Do not use first order flux corrections.")
 @click.option("--inverter", default="kastaun", help="inverter type")
+@click.option("--output0_dt", default=None, help="output0 dt.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -200,7 +202,6 @@ def run_multizone(**kwargs):
             args["b_field/type"] = kwargs["btype"]  # "r1s2" #"vertical"
             if (kwargs["b_ct"]): args["b_field/solver"] = "face_ct"
             else: args["b_field/solver"] = "flux_ct"
-            if (kwargs["derefine_poles"]): args["b_field/derefine_poles"] = 1
             args["b_field/A0"] = kwargs["bz"]
             if kwargs["bclean"]:
                 args["b_field/initial_cleanup"] = 1
@@ -246,6 +247,9 @@ def run_multizone(**kwargs):
             if 'lower' in kwargs["recon"]: kwargs["recon"] = "weno5"
             args["driver/reconstruction"] = kwargs["recon"]
         args["GRMHD/gamma"] = kwargs["gamma"]
+        if (kwargs["derefine_poles"]): 
+            args["GRMHD/ismr_poles"] = 1
+            args["GRMHD/ismr_nlevels"] = kwargs["derefine_nlevels"]
         args["floors/rho_min_geom"] = kwargs["rhomin"]
         args["floors/u_min_geom"] = kwargs["umin"]
         if kwargs["no_fofc"]: args["fofc/on"] = 0
@@ -310,18 +314,19 @@ def run_multizone(**kwargs):
                 # double the runtime for the outermost annulus
                 runtime *= 2
             if args["coordinates/r_in"] < 2:
-                args["boundaries/inner_x1"] = "outflow"
-                args["boundaries/check_inflow_inner_x1"] = 1
                 if (not kwargs['one_trun']): runtime *= 2  # double the runtime for innermost annulus
                 if kwargs["long_t_in"]:
                     print("LONG_T_IN @ RUN # {}: using longer runtime".format(run_num))
                     runtime *= 5  # 5 tff at the log middle radius
                     if kwargs['one_trun']: runtime *= 2 # compensate one_trun here
-            else:
-                args["boundaries/inner_x1"] = "dirichlet"
-                args["boundaries/check_inflow_inner_x1"] = 0
         else:
             runtime = float(kwargs["tlim"])
+        if args["coordinates/r_in"] < 2:
+            args["boundaries/inner_x1"] = "outflow"
+            args["boundaries/check_inflow_inner_x1"] = 1
+        else:
+            args["boundaries/inner_x1"] = "dirichlet"
+            args["boundaries/check_inflow_inner_x1"] = 0
 
         tlim = kwargs["start_time"] + runtime
         if kwargs["onezone"]:
@@ -335,7 +340,8 @@ def run_multizone(**kwargs):
         # Output timing (TODO make options)
         if kwargs["onezone"]:
             runtime = calc_runtime(r_out, r_b, False) # 1-zone will only be run with smaller Bondi problem where trun is capped.
-        args["parthenon/output0/dt"] = max((runtime / 10.0), 1e-7)
+        if kwargs["output0_dt"] is None: args["parthenon/output0/dt"] = max((runtime / 10.0), 1e-7)
+        else: args["parthenon/output0/dt"] = float(kwargs["output0_dt"])
         args["parthenon/output1/dt"] = max((runtime / 5.0), 1e-7)  #
         args["parthenon/output2/dt"] = runtime / 10  # 0.
 
