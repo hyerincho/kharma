@@ -35,7 +35,6 @@ dt_min = 0.00001
 # w/B, cfl=>0.5
 cfl = 0.9
 gamma = 1.666667
-reconstruction = linear_vl
 add_jcon = false
 
 <bondi>

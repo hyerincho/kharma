@@ -119,6 +119,7 @@ def calc_rb(kwargs):
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
 @click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
 @click.option("--no_fofc", is_flag=True, help="Do not use first order flux corrections.")
+@click.option("--inverter", default="kastaun", help="inverter type")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -248,6 +249,7 @@ def run_multizone(**kwargs):
         args["floors/rho_min_geom"] = kwargs["rhomin"]
         args["floors/u_min_geom"] = kwargs["umin"]
         if kwargs["no_fofc"]: args["fofc/on"] = 0
+        args["inverter/type"] = kwargs["inverter"]
 
         # Parameters directly from defaults/cmd
         args["perturbation/u_jitter"] = kwargs["jitter"]
