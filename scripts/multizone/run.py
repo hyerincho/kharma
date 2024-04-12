@@ -120,6 +120,7 @@ def calc_rb(kwargs):
 @click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
 @click.option("--derefine_nlevels", default=1, help="Derefine number of levels for internal SMR.")
 @click.option("--output0_dt", default=None, help="output0 dt.")
+@click.option("--dont_kill_on_divb", is_flag=True, help="Don't kill the simulation when the divB is too large. Mostly for test purposes.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -204,6 +205,7 @@ def run_multizone(**kwargs):
             if kwargs["bclean"]:
                 args["b_field/initial_cleanup"] = 1
                 args["b_cleanup/rel_tolerance"] = 1.e-5
+            if (kwargs["dont_kill_on_divb"]): args["b_field/kill_on_large_divb"] = 0
             # Compress coordinates to save time
             if kwargs["nx2"] >= 128 and not kwargs["onezone"]:
                 args["coordinates/transform"] = "fmks"
@@ -278,7 +280,7 @@ def run_multizone(**kwargs):
         args["parthenon/mesh/nx1"] = calc_nx1(kwargs, args["coordinates/r_out"], args["coordinates/r_in"])
         args["parthenon/mesh/nx2"] = kwargs["nx2"]
         args["parthenon/mesh/nx3"] = kwargs["nx3"]
-        args["parthenon/meshblock/nx1"] = args["parthenon/mesh/nx1"]
+        args["parthenon/meshblock/nx1"] = kwargs["nx1_mb"] / kwargs["nx1"] * args["parthenon/mesh/nx1"]
         args["parthenon/meshblock/nx2"] = kwargs["nx2_mb"]
         args["parthenon/meshblock/nx3"] = kwargs["nx3_mb"]
 
