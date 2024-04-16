@@ -163,10 +163,11 @@ def run_multizone(**kwargs):
         else:
             args["coordinates/r_in"] = base**turn_around
         # Initialize half-vacuum, unless it's the first GIZMO run
-        if kwargs["gizmo"]:
-            args["bondi/r_shell"] = 3e6  # args['coordinates/r_in'] # not using r_shell
-        else:
-            args["bondi/r_shell"] = base ** (turn_around + 2) / 2.0
+        # NOT USING GIZMO, so not using r_shell for now
+        #if kwargs["gizmo"]:
+        #    args["bondi/r_shell"] = 3e6  # args['coordinates/r_in'] # not using r_shell
+        #else:
+        #    args["bondi/r_shell"] = base ** (turn_around + 2) / 2.0
 
         # bondi & vacuum parameters
         # TODO derive these from r_b or gizmo

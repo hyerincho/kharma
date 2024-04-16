@@ -86,7 +86,7 @@ KOKKOS_INLINE_FUNCTION void Xtoindex(const GReal XG[GR_DIM],
 
 KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p,
                     const Real fx1min, const Real fx1max, const bool should_fill, const bool is_spherical,
-                    const Real gam, const Real rs, const Real mdot, const Real ur_frac, const Real uphi, const hsize_t length[GR_DIM], const hsize_t length_fill[GR_DIM],
+                    const Real gam, const Real rs, const Real mdot, const Real ur_frac, const Real uphi, const Real rin_bondi, const hsize_t length[GR_DIM], const hsize_t length_fill[GR_DIM],
                     const GridScalar& x1, const GridScalar& x2, const GridScalar& x3, const GridScalar& rho_file, const GridScalar& u_file, const GridVector& uvec_file,
                     const GridScalar& x1_fill, const GridScalar& x2_fill, const GridScalar& x3_fill, const GridScalar& rho_fill, const GridScalar& u_fill, const GridVector& uvec_fill,
                     const int& k, const int& j, const int& i) 
@@ -102,7 +102,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_restart_kharma(const GRCoordinates& G, cons
     // Interpolate the value at this location from the global grid
     if ((!should_fill) && (X[1]<fx1min)) {// if cannot be read from restart file
         // same as Bondi (06/13/23)
-        get_prim_bondi(G, true, rs, mdot, gam, ur_frac, uphi, 1, false, rho, u, u_prim, k, j, i); // TODO(HC) diffinit=true, r_in_bondi = 1, fill_interior = false for now...
+        get_prim_bondi(G, true, rs, mdot, gam, ur_frac, uphi, rin_bondi, false, rho, u, u_prim, k, j, i); // TODO(HC) diffinit=true, fill_interior = false for now...
 
         // printf("Bondi fill location: %g %g %g %g KS: %g %g %g %g\nr: %g T: %g ur: %g\nucon: %g %g %g %g native: %g %g %g %g\nPrims: %g %g %g %g %g\n",
         //         X[0], X[1], X[2], X[3], Xembed[0], Xembed[1], Xembed[2], Xembed[3],
@@ -167,20 +167,16 @@ KOKKOS_INLINE_FUNCTION void get_B_restart_kharma(const GRCoordinates& G,
         B_cons[v] = 0.;
     }
     else if ((should_fill) && ((X[1]>fx1max)||(X[1]<fx1min))) { // fill with the fname_fill
-        if (i < length_fill_loc[1] && j < length_fill_loc[2] && k < length_fill_loc[3]) {
-            Xtoindex(X, (loc == Loci::face1)? x1f_fill : x1_fill, 
-                        (loc == Loci::face2)? x2f_fill : x2_fill, 
-                        (loc == Loci::face3)? x3f_fill : x3_fill, length_fill_loc, iblocktemp, itemp, jtemp, ktemp, del);
-            B_cons[v] = B_fill(v, iblocktemp, ktemp, jtemp, itemp);
-        }
+        Xtoindex(X, (loc == Loci::face1)? x1f_fill : x1_fill, 
+                    (loc == Loci::face2)? x2f_fill : x2_fill, 
+                    (loc == Loci::face3)? x3f_fill : x3_fill, length_fill_loc, iblocktemp, itemp, jtemp, ktemp, del);
+        B_cons[v] = B_fill(v, iblocktemp, ktemp, jtemp, itemp);
     }
     else { 
-        if (i < length_loc[1] && j < length_loc[2] && k < length_loc[3]) {
-            Xtoindex(X, (loc == Loci::face1)? x1f : x1, 
-                        (loc == Loci::face2)? x2f : x2, 
-                        (loc == Loci::face3)? x3f : x3, length_loc, iblocktemp, itemp, jtemp, ktemp, del);
-            B_cons[v] = B(v, iblocktemp, ktemp, jtemp, itemp);
-        }
+        Xtoindex(X, (loc == Loci::face1)? x1f : x1, 
+                    (loc == Loci::face2)? x2f : x2, 
+                    (loc == Loci::face3)? x3f : x3, length_loc, iblocktemp, itemp, jtemp, ktemp, del);
+        B_cons[v] = B(v, iblocktemp, ktemp, jtemp, itemp);
     }
 
     B_save(v, k, j, i) = B_cons[v];

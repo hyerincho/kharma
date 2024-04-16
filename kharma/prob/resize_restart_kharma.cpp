@@ -173,6 +173,11 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
     int verbose = pin->GetOrAddInteger("debug", "verbose", 0);
     const Real ur_frac = pin->GetOrAddReal("bondi", "ur_frac", 1.); 
     const Real uphi = pin->GetOrAddReal("bondi", "uphi", 0.); 
+    const Real a = pin->GetReal("coordinates", "a");
+    const Real rin_bondi_default = 1 + m::sqrt(1 - a*a) + 0.1;
+    Real rin_bondi_tmp;
+    rin_bondi_tmp = pin->GetOrAddReal("bondi", "r_in_bondi", rin_bondi_default);
+    const Real rin_bondi = rin_bondi_tmp;
 
     // Derived parameters
     hsize_t nBlocks = (int) (n1tot*n2tot*n3tot)/(n1mb*n2mb*n3mb);
@@ -527,28 +532,28 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
     pmb->par_for("copy_restart_state_kharma", ks, ke, js, je, is, ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             get_prim_restart_kharma(G, P, m_p,
-                fx1min_ghost, fx1max_ghost, should_fill, is_spherical, gam, rs, mdot, ur_frac, uphi, length, f_length,
+                fx1min_ghost, fx1max_ghost, should_fill, is_spherical, gam, rs, mdot, ur_frac, uphi, rin_bondi, length, f_length,
                 x1_f_device, x2_f_device, x3_f_device, rho_f_device, u_f_device, uvec_f_device,
                 x1_fill_device, x2_fill_device, x3_fill_device, rho_fill_device, u_fill_device, uvec_fill_device,
                 k, j, i);
         }
     );
     if (include_B) {
-        pmb->par_for("copy_restart_state_kharma", ks, ke + (b_ct), js, je + (b_ct), is, ie + (b_ct),
-            KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                VLOOP {
-                    Loci loc;
-                    if (b_ct) loc = (Loci) v;
-                    else loc = Loci::center;
-                    get_B_restart_kharma(G, fx1min_ghost, fx1max_ghost, should_fill, loc, length, f_length, lengthB, f_lengthB,
-                        x1_f_device, x2_f_device, x3_f_device,
-                        x1B_f_device, x2B_f_device, x3B_f_device, B_f_device,
-                        x1_fill_device, x2_fill_device, x3_fill_device,
-                        x1B_fill_device, x2B_fill_device, x3B_fill_device, B_fill_device, B_Save,
-                        v, k, j, i);
+        Loci loc;
+        VLOOP {
+            if (b_ct) loc = (Loci) v;
+            else loc = Loci::center;
+            pmb->par_for("copy_restart_state_kharma", ks, ke + (dir_of(loc) == 3), js, je + (dir_of(loc) == 2), is, ie + (dir_of(loc) == 1),
+                KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        get_B_restart_kharma(G, fx1min_ghost, fx1max_ghost, should_fill, loc, length, f_length, lengthB, f_lengthB,
+                            x1_f_device, x2_f_device, x3_f_device,
+                            x1B_f_device, x2B_f_device, x3B_f_device, B_f_device,
+                            x1_fill_device, x2_fill_device, x3_fill_device,
+                            x1B_fill_device, x2B_fill_device, x3B_fill_device, B_fill_device, B_Save,
+                            v, k, j, i);
                 }
-            }
-        );
+            );
+        }
     }
 
     return TaskStatus::complete;
