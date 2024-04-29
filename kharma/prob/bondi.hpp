@@ -407,6 +407,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_gizmo_shell_3d(const GRCoordinates& G, cons
             ucon_bl[1] = ur;
             ucon_bl[2] = uth;
             ucon_bl[3] = uphi;
+            if (r < 2e6) ucon_bl[3] = uphi_frac * m::pow(r, -3./2.) * m::sin(th); // override because below this value we don't trust GIZMO
 
             // Set u^t to make u^r a 4-vector
             Real gcov_bl[GR_DIM][GR_DIM];
