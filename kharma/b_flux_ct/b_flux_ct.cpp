@@ -92,6 +92,10 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     bool implicit_b = pin->GetOrAddBoolean("b_field", "implicit", false);
     params.Add("implicit", implicit_b);
 
+    // Added by Hyerin for bflux-const (05/05/24)
+    Real bfluxc = pin->GetOrAddReal("b_field", "bflux_const", 0);
+    params.Add("bflux_const", bfluxc);
+
     // FIELDS
     // Vector size: 3x[grid shape]
     std::vector<int> s_vector({NVEC});
@@ -121,6 +125,10 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
         m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::FillGhost, Metadata::Vector});
         pkg->AddField("B_Save", m);
     }
+    
+    // averaged EMF Added by Hyerin (05/06/24)
+    m = Metadata(flags_emf, s_vector);
+    pkg->AddField("emf_avg", m);
 
     // CALLBACKS
 
@@ -279,13 +287,15 @@ void FluxCT(MeshData<Real> *md)
     // Pointers
     auto pmesh = md->GetMeshPointer();
     auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
+    auto& params = pmb0->packages.Get("B_FluxCT")->AllParams();
     // Exit on trivial operations
     const int ndim = pmesh->ndim;
     if (ndim < 2) return;
 
     // Pack variables
     const auto& B_F = md->PackVariablesAndFluxes(std::vector<std::string>{"cons.B"});
-    const auto& emf_pack = md->PackVariables(std::vector<std::string>{"emf"});
+    auto& emf_pack = md->PackVariables(std::vector<std::string>{"emf"});
+    auto& emf_avg = md->PackVariables(std::vector<std::string>{"emf_avg"});
 
     // Get sizes
     const IndexRange ib = md->GetBoundsI(IndexDomain::interior);
@@ -296,6 +306,11 @@ void FluxCT(MeshData<Real> *md)
     const IndexRange il = IndexRange{ib.s, ib.e + 1};
     const IndexRange jl = IndexRange{jb.s, jb.e + 1};
     const IndexRange kl = (ndim > 2) ? IndexRange{kb.s, kb.e + 1} : kb;
+    
+    // for each meshblocks
+    auto bounds = pmb0->cellbounds;
+    int n2 = bounds.ncellsj(IndexDomain::interior);
+    int n3 = bounds.ncellsk(IndexDomain::interior);
 
     // Calculate emf around each face
     pmb0->par_for("flux_ct_emf", block.s, block.e, kl.s, kl.e, jl.s, jl.e, il.s, il.e,
@@ -310,6 +325,79 @@ void FluxCT(MeshData<Real> *md)
                                         B_F(b).flux(X2DIR, V1, k, j, i) - B_F(b).flux(X2DIR, V1, k, j, i-1));
         }
     );
+    
+    if (params.Get<bool>("fix_flux_inner_x1")) {
+        printf("HYERIN: WARNING! bflux0-const only supports 1 meshblock!\n");
+        int periodic_x2 = (pmb0->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::periodic);
+        int periodic_x3 = (pmb0->boundary_flag[BoundaryFace::inner_x3] == BoundaryFlag::periodic);
+        if (pmb0->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user) {
+            // average (WARNING: bflux-const only supports no splitting in x2, x3 directions for now!)
+            // average and write emf_V2 over x3-direction
+            if (ndim > 2) {
+                pmb0->par_for("avg_emf2_rin", block.s, block.e, 0, 0, jb.s, jb.e, il.s, il.s,
+                    KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                        Real avg = 0.;
+                        for (int ktemp = 0; ktemp < n3 + 1 - periodic_x3; ++ktemp) avg += emf_pack(b, V2, kl.s + ktemp, j, i);
+                        emf_avg(b, V2, k, j, i) = avg / (n3 + 1 - periodic_x3);
+                    }
+                );
+                pmb0->par_for("write_emf2_rin", block.s, block.e, kl.s, kl.e, jb.s, jb.e, il.s, il.s,
+                    KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                        emf_pack(b, V2, k, j, i) = emf_avg(b, V2, 0, j, i);
+                    }
+                );
+            }
+            // average and write emf_V3 over x2-direction
+            pmb0->par_for("avg_emf3_rin", block.s, block.e, kb.s, kb.e, 0, 0, il.s, il.s,
+                KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                    Real avg = 0.;
+                    for (int jtemp = 0; jtemp < n2 + 1 - periodic_x2; ++jtemp) avg += emf_pack(b, V3, k, jl.s + jtemp, i);
+                    emf_avg(b, V3, k, j, i) = avg / (n2 + 1 - periodic_x2);
+                }
+            );
+            pmb0->par_for("write_emf3_rin", block.s, block.e, kb.s, kb.e, jl.s, jl.e, il.s, il.s,
+                KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                    emf_pack(b, V3, k, j, i) = emf_avg(b, V3, k, 0, i);
+                }
+            );
+        }
+    }
+    if (params.Get<bool>("fix_flux_outer_x1")) {
+        printf("HYERIN: WARNING! bflux0-const only supports 1 meshblock!\n");
+        int periodic_x2 = (pmb0->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::periodic);
+        int periodic_x3 = (pmb0->boundary_flag[BoundaryFace::outer_x3] == BoundaryFlag::periodic);
+        if (pmb0->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user) {
+            // average (WARNING: bflux-const only supports no splitting in x2, x3 directions for now!)
+            // average and write emf_V2 over x3-direction
+            if (ndim > 2) {
+                pmb0->par_for("avg_emf2_rout", block.s, block.e, 0, 0, jb.s, jb.e, il.e, il.e,
+                    KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                        Real avg = 0.;
+                        for (int ktemp = 0; ktemp < n3 + 1 - periodic_x3; ++ktemp) avg += emf_pack(b, V2, kl.s + ktemp, j, i);
+                        emf_avg(b, V2, k, j, i) = avg / (n3 + 1 - periodic_x3);
+                    }
+                );
+                pmb0->par_for("write_emf2_rout", block.s, block.e, kl.s, kl.e, jb.s, jb.e, il.e, il.e,
+                    KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                        emf_pack(b, V2, k, j, i) = emf_avg(b, V2, 0, j, i);
+                    }
+                );
+            }
+            // average and write emf_V3 over x2-direction
+            pmb0->par_for("avg_emf3_rout", block.s, block.e, kb.s, kb.e, 0, 0, il.e, il.e,
+                KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                    Real avg = 0.;
+                    for (int jtemp = 0; jtemp < n2 + 1 - periodic_x2; ++jtemp) avg += emf_pack(b, V3, k, jl.s + jtemp, i);
+                    emf_avg(b, V3, k, j, i) = avg / (n2 + 1 - periodic_x2);
+                }
+            );
+            pmb0->par_for("write_emf3_rout", block.s, block.e, kb.s, kb.e, jl.s, jl.e, il.e, il.e,
+                KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
+                    emf_pack(b, V3, k, j, i) = emf_avg(b, V3, k, 0, i);
+                }
+            );
+        }
+    }
 
     // Rewrite EMFs as fluxes, after Toth (2000)
     // Note that zeroing FX(BX) is *necessary* -- this flux gets filled by GetFlux
@@ -348,6 +436,9 @@ void FixBoundaryFlux(MeshData<Real> *md, IndexDomain domain, bool coarse)
 
     // Option for old, pre-Bflux0 
     const bool use_old_x1_fix = pmb0->packages.Get("B_FluxCT")->Param<bool>("use_old_x1_fix");
+
+    // for bflux-const
+    const Real bfluxc = pmb0->packages.Get("B_FluxCT")->Param<Real>("bflux_const");
 
     auto bounds = coarse ? pmb0->c_cellbounds : pmb0->cellbounds;
     const IndexRange ib = bounds.GetBoundsI(IndexDomain::interior);
@@ -418,26 +509,28 @@ void FixBoundaryFlux(MeshData<Real> *md, IndexDomain domain, bool coarse)
             // Courtesy of & implemented by Hyerin Cho
             // Allows nonzero flux across X1 boundary but still keeps divB=0 (turns out effectively to have 0 flux)
             // Usable only for Dirichlet conditions
-            if (domain == IndexDomain::inner_x1 &&
-                pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user)
+            if (0) //domain == IndexDomain::inner_x1 &&
+                //pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user)
             {
+
                 pmb->par_for("fix_flux_b_in", kbs.s, kbs.e, jbs.s, jbs.e, ibf.s, ibf.s, // Hyerin (12/28/22) for 1st & 2nd prescription
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         // Allows nonzero flux across X1 boundary but still keeps divB=0 (turns out effectively to have 0 flux)
-                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i-1) = -B_F.flux(X2DIR, V1, k, j, i) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i);
-                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i-1) = -B_F.flux(X3DIR, V1, k, j, i) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i);
+                        //printf("HYERIN: fluxes %.3g %.3g %.3g\n", -B_F.flux(X2DIR, V1, k, j, i), B_F.flux(X1DIR, V2, k, j, i),  B_F.flux(X1DIR, V2, k, j-1, i));
+                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i-1) = -B_F.flux(X2DIR, V1, k, j, i) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i) + bfluxc;
+                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i-1) = -B_F.flux(X3DIR, V1, k, j, i) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i) + bfluxc;
                     }
                 );
 
             }
-            if (domain == IndexDomain::outer_x1 &&
-                pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user)
+            if (0) //domain == IndexDomain::outer_x1 &&
+                //pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user)
             {
                 pmb->par_for("fix_flux_b_out", kbs.s, kbs.e, jbs.s, jbs.e, ibf.e, ibf.e, // Hyerin (12/28/22) for 1st & 2nd prescription
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         // (02/06/23) 2nd prescription that allows nonzero flux across X1 boundary but still keeps divB=0
-                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i) = -B_F.flux(X2DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i);
-                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i) = -B_F.flux(X3DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i);
+                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i) = -B_F.flux(X2DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i) + bfluxc;
+                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i) = -B_F.flux(X3DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i) + bfluxc;
                     }
                 );
             }
