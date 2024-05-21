@@ -61,12 +61,18 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // They require constant (Dirichlet) boundary conditions
     // These are the "Bflux0" prescription designed by Hyerin Cho
     bool fix_flux_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_x1", false);
+    bool bfluxc = fix_flux_x1 && (pin->GetOrAddBoolean("b_field", "fix_flux_x1_bfluxc", false)); // This is bflux-constant
+    bool bflux0 = fix_flux_x1 && !bfluxc;
     // Split out options. Turn off inner edge by default if inner bound is within EH
     bool r_in_eh = spherical && pin->GetBoolean("coordinates", "domain_intersects_eh");
-    bool fix_flux_inner_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_inner_x1", fix_flux_x1 && !r_in_eh);
-    params.Add("fix_flux_inner_x1", fix_flux_inner_x1);
-    bool fix_flux_outer_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_outer_x1", fix_flux_x1);
-    params.Add("fix_flux_outer_x1", fix_flux_outer_x1);
+    bool bfluxc_inner_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_bfluxc_inner_x1", bfluxc && !r_in_eh);
+    params.Add("bfluxc_inner_x1", bfluxc_inner_x1);
+    bool bflux0_inner_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_bflux0_inner_x1", bflux0 && !r_in_eh && !bfluxc_inner_x1); // prioritize bfluxc for r_in
+    params.Add("bflux0_inner_x1", bflux0_inner_x1);
+    bool bflux0_outer_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_bflux0_outer_x1", bflux0);
+    params.Add("bflux0_outer_x1", bflux0_outer_x1);
+    bool bfluxc_outer_x1 = pin->GetOrAddBoolean("b_field", "fix_flux_bfluxc_outer_x1", bfluxc && !bflux0_outer_x1); // prioritize bflux0 for r_out
+    params.Add("bfluxc_outer_x1", bfluxc_outer_x1);
     // This reverts to a more ham-fisted fix which explicitly disallows flux crossing the X1 face.
     // This version requires *inverted* B1 across the face, potentially just using reflecting conditions for B
     // Using this version is tremendously inadvisable: consult your simulator before applying.
@@ -91,10 +97,6 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     auto& driver = packages->Get("Driver")->AllParams();
     bool implicit_b = pin->GetOrAddBoolean("b_field", "implicit", false);
     params.Add("implicit", implicit_b);
-
-    // Added by Hyerin for bflux-const (05/05/24)
-    Real bfluxc = pin->GetOrAddReal("b_field", "bflux_const", 0);
-    params.Add("bflux_const", bfluxc);
 
     // FIELDS
     // Vector size: 3x[grid shape]
@@ -271,10 +273,10 @@ void FixFlux(MeshData<Real> *md)
         FixBoundaryFlux(md, IndexDomain::inner_x2, false);
         FixBoundaryFlux(md, IndexDomain::outer_x2, false);
     }
-    if (params.Get<bool>("fix_flux_inner_x1")) {
+    if (params.Get<bool>("bflux0_inner_x1")) {
         FixBoundaryFlux(md, IndexDomain::inner_x1, false);
     }
-    if (params.Get<bool>("fix_flux_outer_x1")) {
+    if (params.Get<bool>("bflux0_outer_x1")) {
         FixBoundaryFlux(md, IndexDomain::outer_x1, false);
     }
     FluxCT(md);
@@ -326,7 +328,7 @@ void FluxCT(MeshData<Real> *md)
         }
     );
     
-    if (params.Get<bool>("fix_flux_inner_x1")) {
+    if (params.Get<bool>("bfluxc_inner_x1")) {
         printf("HYERIN: WARNING! bflux0-const only supports 1 meshblock!\n");
         int periodic_x2 = (pmb0->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::periodic);
         int periodic_x3 = (pmb0->boundary_flag[BoundaryFace::inner_x3] == BoundaryFlag::periodic);
@@ -351,8 +353,10 @@ void FluxCT(MeshData<Real> *md)
             pmb0->par_for("avg_emf3_rin", block.s, block.e, kb.s, kb.e, 0, 0, il.s, il.s,
                 KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
                     Real avg = 0.;
-                    for (int jtemp = 0; jtemp < n2 + 1 - periodic_x2; ++jtemp) avg += emf_pack(b, V3, k, jl.s + jtemp, i);
-                    emf_avg(b, V3, k, j, i) = avg / (n2 + 1 - periodic_x2);
+                    if (periodic_x2) {
+                        for (int jtemp = 0; jtemp < n2 + 1 - periodic_x2; ++jtemp) avg += emf_pack(b, V3, k, jl.s + jtemp, i);
+                        emf_avg(b, V3, k, j, i) = avg / (n2 + 1 - periodic_x2);
+                    } else emf_avg(b, V3, k, j, i) = 0.; // if x2 boundary is reflecting, the averaging doesn't preserver the divergence. Therefore, just set it to 0.
                 }
             );
             pmb0->par_for("write_emf3_rin", block.s, block.e, kb.s, kb.e, jl.s, jl.e, il.s, il.s,
@@ -362,7 +366,7 @@ void FluxCT(MeshData<Real> *md)
             );
         }
     }
-    if (params.Get<bool>("fix_flux_outer_x1")) {
+    if (params.Get<bool>("bfluxc_outer_x1")) {
         printf("HYERIN: WARNING! bflux0-const only supports 1 meshblock!\n");
         int periodic_x2 = (pmb0->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::periodic);
         int periodic_x3 = (pmb0->boundary_flag[BoundaryFace::outer_x3] == BoundaryFlag::periodic);
@@ -387,8 +391,10 @@ void FluxCT(MeshData<Real> *md)
             pmb0->par_for("avg_emf3_rout", block.s, block.e, kb.s, kb.e, 0, 0, il.e, il.e,
                 KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
                     Real avg = 0.;
-                    for (int jtemp = 0; jtemp < n2 + 1 - periodic_x2; ++jtemp) avg += emf_pack(b, V3, k, jl.s + jtemp, i);
-                    emf_avg(b, V3, k, j, i) = avg / (n2 + 1 - periodic_x2);
+                    if (periodic_x2) {
+                        for (int jtemp = 0; jtemp < n2 + 1 - periodic_x2; ++jtemp) avg += emf_pack(b, V3, k, jl.s + jtemp, i);
+                        emf_avg(b, V3, k, j, i) = avg / (n2 + 1 - periodic_x2);
+                    } else emf_avg(b, V3, k, j, i) = 0.; // if x2 boundary is reflecting, the averaging doesn't preserver the divergence. Therefore, just set it to 0.
                 }
             );
             pmb0->par_for("write_emf3_rout", block.s, block.e, kb.s, kb.e, jl.s, jl.e, il.e, il.e,
@@ -438,7 +444,7 @@ void FixBoundaryFlux(MeshData<Real> *md, IndexDomain domain, bool coarse)
     const bool use_old_x1_fix = pmb0->packages.Get("B_FluxCT")->Param<bool>("use_old_x1_fix");
 
     // for bflux-const
-    const Real bfluxc = pmb0->packages.Get("B_FluxCT")->Param<Real>("bflux_const");
+    //const Real bfluxc = pmb0->packages.Get("B_FluxCT")->Param<Real>("bflux_const");
 
     auto bounds = coarse ? pmb0->c_cellbounds : pmb0->cellbounds;
     const IndexRange ib = bounds.GetBoundsI(IndexDomain::interior);
@@ -509,28 +515,28 @@ void FixBoundaryFlux(MeshData<Real> *md, IndexDomain domain, bool coarse)
             // Courtesy of & implemented by Hyerin Cho
             // Allows nonzero flux across X1 boundary but still keeps divB=0 (turns out effectively to have 0 flux)
             // Usable only for Dirichlet conditions
-            if (0) //domain == IndexDomain::inner_x1 &&
-                //pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user)
+            if (domain == IndexDomain::inner_x1 &&
+                pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user)
             {
 
                 pmb->par_for("fix_flux_b_in", kbs.s, kbs.e, jbs.s, jbs.e, ibf.s, ibf.s, // Hyerin (12/28/22) for 1st & 2nd prescription
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         // Allows nonzero flux across X1 boundary but still keeps divB=0 (turns out effectively to have 0 flux)
                         //printf("HYERIN: fluxes %.3g %.3g %.3g\n", -B_F.flux(X2DIR, V1, k, j, i), B_F.flux(X1DIR, V2, k, j, i),  B_F.flux(X1DIR, V2, k, j-1, i));
-                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i-1) = -B_F.flux(X2DIR, V1, k, j, i) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i) + bfluxc;
-                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i-1) = -B_F.flux(X3DIR, V1, k, j, i) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i) + bfluxc;
+                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i-1) = -B_F.flux(X2DIR, V1, k, j, i) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i);
+                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i-1) = -B_F.flux(X3DIR, V1, k, j, i) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i);
                     }
                 );
 
             }
-            if (0) //domain == IndexDomain::outer_x1 &&
-                //pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user)
+            if (domain == IndexDomain::outer_x1 &&
+                pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user)
             {
                 pmb->par_for("fix_flux_b_out", kbs.s, kbs.e, jbs.s, jbs.e, ibf.e, ibf.e, // Hyerin (12/28/22) for 1st & 2nd prescription
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         // (02/06/23) 2nd prescription that allows nonzero flux across X1 boundary but still keeps divB=0
-                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i) = -B_F.flux(X2DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i) + bfluxc;
-                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i) = -B_F.flux(X3DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i) + bfluxc;
+                        if (ndim > 1) B_F.flux(X2DIR, V1, k, j, i) = -B_F.flux(X2DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V2, k, j, i) + B_F.flux(X1DIR, V2, k, j-1, i);
+                        if (ndim > 2) B_F.flux(X3DIR, V1, k, j, i) = -B_F.flux(X3DIR, V1, k, j, i-1) + B_F.flux(X1DIR, V3, k, j, i) + B_F.flux(X1DIR, V3, k-1, j, i);
                     }
                 );
             }
@@ -575,9 +581,11 @@ IndexRange ValidDivBX1(MeshBlock *pmb)
     // All user, physical (not MPI/periodic) boundary conditions in X1 will generate divB on corners
     // intersecting the interior & exterior faces. Don't report these zones, as we expect it.
     const IndexRange ibl = pmb->meshblock_data.Get()->GetBoundsI(IndexDomain::interior);
-    bool avoid_inner = (!pmb->packages.Get("B_FluxCT")->Param<bool>("fix_flux_inner_x1") &&
+    bool avoid_inner = (!pmb->packages.Get("B_FluxCT")->Param<bool>("bflux0_inner_x1") &&
+                    !pmb->packages.Get("B_FluxCT")->Param<bool>("bfluxc_inner_x1") &&
         pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user);
-    bool avoid_outer = (!pmb->packages.Get("B_FluxCT")->Param<bool>("fix_flux_outer_x1") &&
+    bool avoid_outer = (!pmb->packages.Get("B_FluxCT")->Param<bool>("bflux0_outer_x1") &&
+                    !pmb->packages.Get("B_FluxCT")->Param<bool>("bfluxc_outer_x1") &&
         pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user);
     return IndexRange{ibl.s + (avoid_inner), ibl.e + (!avoid_outer)};
 }

@@ -121,6 +121,9 @@ def calc_rb(kwargs):
 @click.option("--derefine_nlevels", default=1, help="Derefine number of levels for internal SMR.")
 @click.option("--output0_dt", default=None, help="output0 dt.")
 @click.option("--dont_kill_on_divb", is_flag=True, help="Don't kill the simulation when the divB is too large. Mostly for test purposes.")
+@click.option("--bfluxc", is_flag=True, help="Apply Bflux-constant.")
+@click.option("--bflux0_at_largest_rout", is_flag=True, help="Apply Bflux0 at the largest radial boundary.")
+@click.option("--nobflux_at_largest_rout", is_flag=True, help="Don't applly any bflux at the largest radial boundary.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -207,6 +210,11 @@ def run_multizone(**kwargs):
                 args["b_field/initial_cleanup"] = 1
                 args["b_cleanup/rel_tolerance"] = 1.e-5
             if (kwargs["dont_kill_on_divb"]): args["b_field/kill_on_large_divb"] = 0
+            if (kwargs["bfluxc"]): args["b_field/fix_flux_x1_bfluxc"] = 1
+            if (kwargs["bflux0_at_largest_rout"]): args["b_field/fix_flux_bflux0_outer_x1"] = 1 # Apply bflux0 at the largest radial boundary
+            if (kwargs["nobflux_at_largest_rout"]): 
+                args["b_field/fix_flux_bflux0_outer_x1"] = 0 
+                args["b_field/fix_flux_bfluxc_outer_x1"] = 0 
             # Compress coordinates to save time
             if kwargs["nx2"] >= 128 and not kwargs["onezone"]:
                 args["coordinates/transform"] = "fmks"
@@ -444,12 +452,21 @@ def update_args(run_num, kwargs, args):
             if not kwargs["move_rin"]:
                 args["coordinates/r_out"] = last_r_out * kwargs["base"]
             args["coordinates/r_in"] = last_r_in * kwargs["base"]
-
-        if (kwargs["combine_out_ann"]) and args["coordinates/r_in"] >= kwargs["base"] ** (kwargs["nzones_eff"] - (kwargs["base"] > 2)):
-            # if the next simulation is at the largest annulus,
-            # make r_out and nx1 larger
-            # if base < 2, the largest r_in is base^nzones_eff. if not, base^nzones_eff-1
-            args["coordinates/r_out"] = kwargs["base"] ** (kwargs["nzones"] + 1)
+    
+        # if the next simulation is at the largest annulus,
+        if args["coordinates/r_in"] >= kwargs["base"] ** (kwargs["nzones_eff"] - (kwargs["base"] > 2)):
+            if (kwargs["combine_out_ann"]):
+                # make r_out and nx1 larger
+                # if base < 2, the largest r_in is base^nzones_eff. if not, base^nzones_eff-1
+                args["coordinates/r_out"] = kwargs["base"] ** (kwargs["nzones"] + 1)
+            if (kwargs["bflux0_at_largest_rout"]): args["b_field/fix_flux_bflux0_outer_x1"] = 1 # Apply bflux0 at the largest radial boundary
+            if (kwargs["nobflux_at_largest_rout"]): 
+                args["b_field/fix_flux_bflux0_outer_x1"] = 0
+                args["b_field/fix_flux_bfluxc_outer_x1"] = 0
+        else: 
+            if (kwargs["bfluxc"]): 
+                args["b_field/fix_flux_bflux0_outer_x1"] = 0
+                args["b_field/fix_flux_bfluxc_outer_x1"] = 1
         if (kwargs["combine_in_ann"]) and args["coordinates/r_in"] <= kwargs["base"]:
             if out_to_in > 0 : args["coordinates/r_in"] = 1
             else: args["coordinates/r_in"] *= kwargs["base"]
