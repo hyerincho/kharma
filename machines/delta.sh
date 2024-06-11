@@ -18,6 +18,10 @@ then
   module purge
   module load cmake
 
+  module purge
+  echo $ARGS
+  echo $HOST
+
   if [[ $ARGS == *"cuda"* ]]
   then
     # GPU Compile
@@ -50,7 +54,7 @@ then
     fi
   else
     # CPU Compile
-    module load modtree/cpu gcc
+    module load modtree/cpu gcc cmake #hdf5 
     MPI_NUM_PROCS=1
   fi
 fi

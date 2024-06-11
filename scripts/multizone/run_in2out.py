@@ -142,8 +142,14 @@ def run_multizone(**kwargs):
             args['b_field/solver'] = "flux_ct"
             args['b_field/bz'] = kwargs['bz']
             # Compress coordinates to save time
-            args['coordinates/transform'] = "mks"
-            args['coordinates/hslope'] = 0.3
+            if kwargs['nx1'] >= 128:
+                args['coordinates/transform'] = "fmks"
+                args['coordinates/mks_smooth'] = 0.
+                args['coordinates/poly_xt'] = 0.8
+                args['coordinates/poly_alpha'] = 16
+            else:
+                args['coordinates/transform'] = "mks"
+                args['coordinates/hslope'] = 0.3
             # Enable the floors
             args['floors/disable_floors'] = False
             # And modify a bunch of defaults
@@ -173,6 +179,7 @@ def run_multizone(**kwargs):
     if kwargs['parfile'] is None:
         kwargs['parfile'] = mz_dir+"/multizone.par"
 
+    stop = False
     # Iterate, starting with the default args and updating as we go
     for run_num in np.arange(kwargs['start_run'], kwargs['nruns']):
         # run times for each annulus
@@ -189,15 +196,20 @@ def run_multizone(**kwargs):
                 runtime = calc_runtime(r_out, r_b)
             # B field runs use half this
             if kwargs['bz'] != 0.0:
-                runtime /= 10 # 2
+                runtime /= np.power(base,3./2)*2
         else:
             runtime = float(kwargs['tlim'])
-        args['parthenon/time/tlim'] = kwargs['start_time'] + runtime
+
+        tlim = kwargs['start_time'] + runtime
+        tlim_max = 500.*np.power(r_b,3./2.)
+        if tlim > tlim_max:
+            stop = True
+        args['parthenon/time/tlim'] = tlim #min(kwargs['start_time'] + runtime,10.*np.power(r_b,3./2))
 
         # Output timing (TODO make options)
-        args['parthenon/output0/dt'] = max(int(runtime/10.), 1)
-        args['parthenon/output1/dt'] = max(int(runtime/5.), 1)
-        args['parthenon/output2/dt'] = runtime/100.
+        args['parthenon/output0/dt'] = max((runtime/4.), 1e-7)
+        args['parthenon/output1/dt'] = max((runtime/2.), 1e-7)
+        args['parthenon/output2/dt'] = runtime/10 #0.
 
         # Start any future run from this point
         kwargs['start_run'] = run_num
@@ -229,6 +241,9 @@ def run_multizone(**kwargs):
         if ret_obj.returncode != 0:
             print("KHARMA returned error: {}. Exiting.".format(ret_obj.returncode))
             exit(-1)
+        if stop:
+            print("tlim max reached!")
+            break
 
         # Update parameters for the next pass
         # This updates both kwargs (start_time) and args (coordinates, dt, iteration #, fnames)
@@ -243,7 +258,7 @@ def update_args(run_num, kwargs, args):
     args['parthenon/job/problem_id']="resize_restart_kharma"
 
     # Filename to restart from
-    fname_dir = "{:05d}".format(run_num)
+    fname_dir = data_dir(run_num)
     fname=glob.glob(fname_dir+"/*final.rhdf")[0]
     # Get start_time, ncycle, dt from previous run
     start_time = pyharm.io.get_dump_time(fname)
