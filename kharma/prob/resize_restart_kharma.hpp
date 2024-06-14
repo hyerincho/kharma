@@ -29,7 +29,7 @@ inline std::string RestartFileName(const int i, ParameterInput *pin)
         case 0:
             return pin->GetString("resize_restart", "fname"); // Require this, don't guess. 1st priority
         default:
-            return pin->GetOrAddString("resize_restart", "fname_fill" + to_string(i), "none");
+            return pin->GetOrAddString("resize_restart", "fname_fill" + std::to_string(i), "none");
     }
 }
 
@@ -166,8 +166,6 @@ KOKKOS_INLINE_FUNCTION void get_B_restart_kharma(const GReal X[GR_DIM], const GR
                     const GridScalar& x1f, const GridScalar& x2f, const GridScalar& x3f, const GridVector& B, const GridVector& B_save,
                     const int& v, const int& k, const int& j, const int& i) 
 {
-    Real B_cons[NVEC];
-    
     GReal del[GR_DIM]; // not really needed now since I am doing nearest neighbor interpolation
     int iblocktemp, itemp, jtemp, ktemp;
     hsize_t length_loc[GR_DIM];

@@ -32,6 +32,19 @@ def data_dir(n):
     """Data directory naming scheme"""
     return "{:05d}".format(n)
 
+
+def calc_rb(kwargs):
+    gam = kwargs["gamma"]
+    n = 1.0 / (gam - 1)
+    rs = float(kwargs["rs"])
+    if abs(gam - 5.0 / 3.0) < 1e-2:
+        # only when gamma = 5/3, rb ~ rs^2
+        r_b = 80.0 * rs**2 / (27.0 * gam)
+    else:
+        # otherwise, rb ~ rs
+        r_b = 4 * (1 + n) * rs / ((2 * (n + 3) - 9) * gam)
+    return r_b
+
 @click.command()
 # Run parameters
 @click.option('--nx1', default=64, help="1-Run radial resolution")
@@ -47,7 +60,7 @@ def data_dir(n):
 @click.option('--bz', default=0.0, help="B field Z component. Zero for no field")
 @click.option('--tlim', default=None, help="Enforce a specific tlim for every run (for testing)")
 @click.option('--nlim', default=-1, help="Consistent max number of steps for each run")
-@click.option('--r_b', default=1.e5, help="Bondi radius. None chooses based on nzones")
+@click.option("--rs", default=np.sqrt(1.0e5), help="sonic radius. None chooses based on nzones")
 @click.option('--jitter', default=0.0, help="Proportional jitter to apply to starting state. Default 10% w/B field")
 # Flags and options
 @click.option('--kharma_bin', default="kharma.cuda", help="Name (not path) of KHARMA binary to run")
@@ -61,6 +74,10 @@ def data_dir(n):
 @click.option('--cleanup', is_flag=True, help="Clean up divB")
 @click.option('--in2out', is_flag=True, help="Only go from in to out")
 @click.option('--out2in', is_flag=True, help="Only go from out to in")
+@click.option("--coord", default=None, help="coordinate system")
+@click.option("--b2u_max", default=None, help="bsq_over_u_max floor.")
+@click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
+@click.option("--gamma", default=5.0 / 3, help="adiabatic index.")
 # Don't use this
 @click.option('--start_time', default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -77,7 +94,7 @@ def run_multizone(**kwargs):
     # We're kept in a script subdirectory in kharma/
     mz_dir = os.path.dirname(os.path.realpath(__file__))
     # parent
-    kharma_dir = mz_dir+"/../../.."
+    kharma_dir = mz_dir+"/../.."
     # Get our name from the working dir
     run_name = os.getcwd().split("/")[-1]
 
@@ -118,8 +135,8 @@ def run_multizone(**kwargs):
         args['parthenon/job/problem_id'] = "resize_restart_kharma"
         args['resize_restart/base'] = base
         args['resize_restart/nzone'] = kwargs['nzones']
-        fn_dir = "../082423_n4" #"../073123_64_weno_g10" #"../072723_weno_g10" #"../071023_beta01" #"../072023_test_to_rst_frm" #
-        fname_num = 4040 #3510 #31549 #47341 #
+        fn_dir = "../013024_kharma_next_ct/35_ismr_a0.5" #"../082423_n4" #"../073123_64_weno_g10" #"../072723_weno_g10" #"../071023_beta01" #"../072023_test_to_rst_frm" #
+        fname_num = 9784 #4040 #3510 #31549 #47341 #
         fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
         kwargs['start_time'] = pyharm.io.get_dump_time(fname)
         fname_fill1 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
@@ -146,31 +163,15 @@ def run_multizone(**kwargs):
 
         # bondi & vacuum parameters
         # TODO derive these from r_b or gizmo
-        if kwargs['nzones'] == 3 or kwargs['nzones'] == 6:
-            kwargs['r_b'] = 256
-            logrho = -4.13354231
-            log_u_over_rho = -2.57960521
-        elif kwargs['nzones'] == 4:
-            kwargs['r_b'] = 256
-            logrho = -4.200592800419657
-            log_u_over_rho = -2.62430556
-        elif kwargs['gizmo']:
-            kwargs['r_b'] = 1e5
-            logrho = -7.80243572
-            log_u_over_rho = -5.34068635
-        else:
-            kwargs['r_b'] = 1e5
-            logrho = -8.2014518
-            log_u_over_rho = -5.2915149
-        args['bondi/vacuum_logrho'] = logrho
-        args['bondi/vacuum_log_u_over_rho'] = log_u_over_rho
-        args['bondi/rs'] = np.sqrt(float(kwargs['r_b']))
+        args["bondi/rs"] = kwargs["rs"]
+        args["bondi/r_b"] = calc_rb(kwargs)
 
         # B field additions
         if kwargs['bz'] != 0.0:
             # Set a field to initialize with 
             args['b_field/type'] = "vertical"
-            args['b_field/solver'] = "flux_ct"
+            if (kwargs["b_ct"]): args["b_field/solver"] = "face_ct"
+            else: args["b_field/solver"] = "flux_ct"
             args['b_field/bz'] = kwargs['bz']
             # Compress coordinates to save time
             args['coordinates/transform'] = "mks"
@@ -178,6 +179,7 @@ def run_multizone(**kwargs):
             # Enable the floors
             args['floors/disable_floors'] = False
             args['floors/gamma_max'] = 10
+            if kwargs["b2u_max"] is not None: args["floors/bsq_over_u_max"] = float(kwargs["b2u_max"])
             args['GRMHD/reconstruction'] = "weno5"
             # And modify a bunch of defaults
             # Assume we will always want jitter if we have B unless a 2D problem
@@ -186,7 +188,10 @@ def run_multizone(**kwargs):
             # Lower the cfl condition in B field
             args['GRMHD/cfl'] = 0.5
 
+        args["GRMHD/gamma"] = kwargs["gamma"]
         # Parameters directly from defaults/cmd
+        if kwargs["coord"] is not None:
+            args["coordinates/transform"] = kwargs["coord"]
         args['perturbation/u_jitter'] = kwargs['jitter']
         args['coordinates/a'] = kwargs['spin']
         args['coordinates/ext_g'] = kwargs['ext_g']
@@ -219,7 +224,7 @@ def run_multizone(**kwargs):
     for run_num in np.arange(kwargs['start_run'], kwargs['nruns'] + kwargs['nzones']):
         # run times for each annulus
         r_out = args['coordinates/r_out']
-        r_b = float(kwargs['r_b'])
+        r_b = float(args['bondi/r_b'])
         base = args['resize_restart/base']
         outermost_zone = 2 * (kwargs['nzones'] - 1)
         if kwargs['tlim'] is None:

@@ -44,9 +44,7 @@
 // Reads in KHARMA restart file but at a different simulation size
 
 void ReadFillFile(int i, ParameterInput *pin) {
-    char str[20];
-    sprintf(str, "fname_fill%d", i);
-    auto fname_fill = pin->GetOrAddString("resize_restart", str, "none");
+    auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill" + std::to_string(i), "none");
 
     if (!(fname_fill == "none")) {
         std::unique_ptr<RestartReader> restartReader;
@@ -70,21 +68,14 @@ void ReadFillFile(int i, ParameterInput *pin) {
         
         restartReader = nullptr;
 
-        sprintf(str, "restart_x1min_f%d", i);
-        pin->SetReal("parthenon/mesh", str, fx1min);
-
-        sprintf(str, "restart_x1max_f%d", i);
-        pin->SetReal("parthenon/mesh", str, fx1max);
-
-        sprintf(str, "restart%d_nx1", i);
-        pin->SetInteger("parthenon/mesh", str, fnx1);
-        pin->SetInteger("parthenon/meshblock", str, fmbnx1);
-        sprintf(str, "restart%d_nx2", i);
-        pin->SetInteger("parthenon/mesh", str, fnx2);
-        pin->SetInteger("parthenon/meshblock", str, fmbnx2);
-        sprintf(str, "restart%d_nx3", i);
-        pin->SetInteger("parthenon/mesh", str, fnx3);
-        pin->SetInteger("parthenon/meshblock", str, fmbnx3);
+        pin->SetReal("parthenon/mesh", "restart_x1min_f" + std::to_string(i), fx1min);
+        pin->SetReal("parthenon/mesh", "restart_x1max_f" + std::to_string(i), fx1max);
+        pin->SetInteger("parthenon/mesh", "restart" + std::to_string(i) + "_nx1", fnx1);
+        pin->SetInteger("parthenon/meshblock", "restart" + std::to_string(i) + "_nx1", fmbnx1);
+        pin->SetInteger("parthenon/mesh", "restart" + std::to_string(i) + "_nx2", fnx2);
+        pin->SetInteger("parthenon/meshblock", "restart" + std::to_string(i) + "_nx2", fmbnx2);
+        pin->SetInteger("parthenon/mesh", "restart" + std::to_string(i) + "_nx3", fnx3);
+        pin->SetInteger("parthenon/meshblock", "restart" + std::to_string(i) + "_nx3", fmbnx3);
     }
 }
 
@@ -171,17 +162,18 @@ void ReadKharmaRestartHeader(std::string fname, ParameterInput *pin)
 TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterInput *pin)
 {
     auto pmb = rc->GetBlockPointer();
+    const int num_files_max = 8;
 
     const int n1tot = pin->GetInteger("parthenon/mesh", "restart_nx1");
     const int n2tot = pin->GetInteger("parthenon/mesh", "restart_nx2");
     const int n3tot = pin->GetInteger("parthenon/mesh", "restart_nx3");
-    const int n1mb = pin->GetInteger("parthenon/meshblock", "restart_nx1");
-    const int n2mb = pin->GetInteger("parthenon/meshblock", "restart_nx2");
-    const int n3mb = pin->GetInteger("parthenon/meshblock", "restart_nx3");
+    const hsize_t n1mb = pin->GetInteger("parthenon/meshblock", "restart_nx1");
+    const hsize_t n2mb = pin->GetInteger("parthenon/meshblock", "restart_nx2");
+    const hsize_t n3mb = pin->GetInteger("parthenon/meshblock", "restart_nx3");
     // file names
     std::vector<std::string> fname_arr;
-    for (int i_f = 0; i_f < 8; i_f++) {
-        fname_arr.pushback(RestartFileName(i_f, pin));
+    for (int i_f = 0; i_f < num_files_max; i_f++) {
+        fname_arr.push_back(RestartFileName(i_f, pin));
     }
     //auto fname = pin->GetString("resize_restart", "fname"); // Require this, don't guess. 1st priority
     //auto fname_fill1 = pin->GetOrAddString("resize_restart", "fname_fill1", "none"); // 2nd
@@ -191,28 +183,25 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
     //auto fname_fill5 = pin->GetOrAddString("resize_restart", "fname_fill5", "none"); // 6th
     //auto fname_fill6 = pin->GetOrAddString("resize_restart", "fname_fill6", "none"); // 7th
     //auto fname_fill7 = pin->GetOrAddString("resize_restart", "fname_fill7", "none"); // 8th
-    char num[20];
-    std::vector<bool> should_fill_arr;
-    for (int i_f = 0; i_f < 7; i_f++) { // fill files
-        sprintf(num, "%d", i);
-        should_fill_arr.pushback(!(fname_arr[i] == "none"));
+    bool should_fill_arr[num_files_max];
+    for (int i_f = 0; i_f < num_files_max; i_f++) { // fill files
+        should_fill_arr[i_f] = (!(fname_arr[i_f] == "none"));
     }
     // restart files dimensions
     // TODO Hyerin (07/23/23) assume all the "fill" files have the same dimension.
     const int f_n1tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx1", -1);
     const int f_n2tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx2", -1);
     const int f_n3tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx3", -1);
-    const int f_n1mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx1", -1);
-    const int f_n2mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx2", -1);
-    const int f_n3mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx3", -1);
+    const hsize_t f_n1mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx1", -1);
+    const hsize_t f_n2mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx2", -1);
+    const hsize_t f_n3mb = pin->GetOrAddInteger("parthenon/meshblock", "restart1_nx3", -1);
     // fx1mins, fx1maxs
-    std::vector<Real> fx1min_arr, fx1max_arr;
-    fx1min_arr.pushback(pin->GetReal("parthenon/mesh", "restart_x1min"));
-    fx1max_arr.pushback(pin->GetReal("parthenon/mesh", "restart_x1max"));
+    Real fx1min_arr[8], fx1max_arr[8];
+    fx1min_arr[0] = (pin->GetReal("parthenon/mesh", "restart_x1min"));
+    fx1max_arr[0] = (pin->GetReal("parthenon/mesh", "restart_x1max"));
     for (int i_f = 1; i_f < 7; i_f++) { // fill files
-        sprintf(num, "%d", i);
-        fx1min_arr.pushback(pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f" + num, -1));
-        fx1max_arr.pushback(pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f" + num, -1));
+        fx1min_arr[i_f] = (pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f" + std::to_string(i_f), -1));
+        fx1max_arr[i_f] = (pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f" + std::to_string(i_f), -1));
     }
     //const Real fx1min_f1 = pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f1", -1);
     //const Real fx1max_f1 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f1", -1);
@@ -231,16 +220,9 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
     const Real x3min = pin->GetReal("parthenon/mesh", "x3min");
     const Real x3max = pin->GetReal("parthenon/mesh", "x3max");
     const bool fghostzones = pin->GetBoolean("parthenon/mesh", "restart_ghostzones");
-    const int fnghost = pin->GetReal("parthenon/mesh", "restart_nghost");
+    int fnghost = pin->GetReal("parthenon/mesh", "restart_nghost");
     auto b_field_type = pin->GetOrAddString("b_field", "type", "none");
     int verbose = pin->GetOrAddInteger("debug", "verbose", 0);
-    const Real ur_frac = pin->GetOrAddReal("bondi", "ur_frac", 1.); 
-    const Real uphi = pin->GetOrAddReal("bondi", "uphi", 0.); 
-    const Real a = pin->GetReal("coordinates", "a");
-    const Real rin_bondi_default = 1 + m::sqrt(1 - a*a) + 0.1;
-    Real rin_bondi_tmp;
-    rin_bondi_tmp = pin->GetOrAddReal("bondi", "r_in_bondi", rin_bondi_default);
-    const Real rin_bondi = rin_bondi_tmp;
 
     // Derived parameters
     hsize_t nBlocks = (int) (n1tot*n2tot*n3tot)/(n1mb*n2mb*n3mb);
@@ -248,8 +230,6 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
     const GReal dx[GR_DIM] = {0., (fx1max_arr[0] - fx1min_arr[0])/n1tot,
                                   (x2max - x2min)/n2tot,
                                   (x3max - x3min)/n3tot};
-    const Real fx1min_ghost = fx1min_arr[0] - fnghost * dx[1];
-    const Real fx1max_ghost = fx1max_arr[0] + fnghost * dx[1];
     const bool include_B = (b_field_type != "none");
     auto pkgs = pmb->packages.AllPackages();
     const bool b_ct = (pkgs.count("B_CT"));
@@ -898,17 +878,16 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
             }
             for (int ktemp = 0; ktemp < f_lengthB[3]; ktemp++) {
                 scalar_file_index = f_lengthB[3] * iblocktemp + ktemp;
-                if (should_fill_arr[1]) x3B_fill1_host(iblocktemp, jtemp) = x3B_filefill1[scalar_file_index];
-                if (should_fill_arr[2]) x3B_fill2_host(iblocktemp, jtemp) = x3B_filefill2[scalar_file_index];
-                if (should_fill_arr[3]) x3B_fill3_host(iblocktemp, jtemp) = x3B_filefill3[scalar_file_index];
-                if (should_fill_arr[4]) x3B_fill4_host(iblocktemp, jtemp) = x3B_filefill4[scalar_file_index];
-                if (should_fill_arr[5]) x3B_fill5_host(iblocktemp, jtemp) = x3B_filefill5[scalar_file_index];
-                if (should_fill_arr[6]) x3B_fill6_host(iblocktemp, jtemp) = x3B_filefill6[scalar_file_index];
-                if (should_fill_arr[7]) x3B_fill7_host(iblocktemp, jtemp) = x3B_filefill7[scalar_file_index];
+                if (should_fill_arr[1]) x3B_fill1_host(iblocktemp, ktemp) = x3B_filefill1[scalar_file_index];
+                if (should_fill_arr[2]) x3B_fill2_host(iblocktemp, ktemp) = x3B_filefill2[scalar_file_index];
+                if (should_fill_arr[3]) x3B_fill3_host(iblocktemp, ktemp) = x3B_filefill3[scalar_file_index];
+                if (should_fill_arr[4]) x3B_fill4_host(iblocktemp, ktemp) = x3B_filefill4[scalar_file_index];
+                if (should_fill_arr[5]) x3B_fill5_host(iblocktemp, ktemp) = x3B_filefill5[scalar_file_index];
+                if (should_fill_arr[6]) x3B_fill6_host(iblocktemp, ktemp) = x3B_filefill6[scalar_file_index];
+                if (should_fill_arr[7]) x3B_fill7_host(iblocktemp, ktemp) = x3B_filefill7[scalar_file_index];
             }
         }
     }
-    const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
 
     // Deep copy to device
     x1_f_device.DeepCopy(x1_f_host);
@@ -1078,9 +1057,8 @@ TaskStatus ReadKharmaRestart(std::shared_ptr<MeshBlockData<Real>> rc, ParameterI
 
     // Device-side interpolate & copy into the mirror array
     if (MPIRank0() && verbose > 0) {
-        std::cout << "Initializing KHARMA restart.  Filling " << fx1min_ghost << " to " << fx1max_ghost << " from " << fname
-                    << " and the rest from " << fname_fill << std::endl;
-        std::cout << "Vacuum gam: " << gam << " mdot: " << mdot << " rs: " << rs << std::endl;
+        std::cout << "Initializing KHARMA restart.  Filling from " << fname_arr[0]
+                    << ", " << fname_arr[1] << ", ..." << std::endl;
     }
 
     // Read to the entire meshblock -- we'll set the Dirichlet boundaries based on the

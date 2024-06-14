@@ -91,7 +91,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
     std::string b_field_type = pin->GetString("b_field", "type");
     auto prob = pin->GetString("parthenon/job", "problem_id");
     bool is_torus = (prob == "torus");
-    auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill", "none");
+    auto fname_fill = pin->GetOrAddString("resize_restart", "fname_fill1", "none");
     const bool should_fill = !(fname_fill == "none");
     Real fx1min, fx1max, dx1, fx1min_ghost;
     int n1tot, fnghost;
@@ -362,7 +362,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                     KOKKOS_LAMBDA(const int &k, const int &j, const int &i) {
                         GReal X[GR_DIM];
                         G.coord(k, j, i, Loci::face1, X);
-
+            
                         if ((!should_fill) && (X[1] < fx1min_ghost)) {// if cannot be read from restart file
                             // do nothing. just use the initialization from SeedBField
                         } else {
