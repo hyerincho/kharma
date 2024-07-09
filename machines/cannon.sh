@@ -18,7 +18,7 @@ if [[ "$ARGS" == *"rocky"* ]]; then
     if [[ "$ARGS" == *"cudaaware"* ]]; then
       # CUDA aware MPI
       #module load ucx/1.14.1-fasrc02
-      MPI_NUM_PROCS=4
+      MPI_NUM_PROCS=${MPI_NUM_PROCS:-4}
       MPI_EXE="srun" #"mpirun" #
       #export KOKKOS_NUM_DEVICES=4
     #else

@@ -43,9 +43,8 @@ mdot = 1.0
 rs = 316.22776601683796
 r_in_bondi = 2.0
 diffinit = true
-use_gizmo = false
 
-<gizmo_shell>
+<gizmo>
 datfn = none
 
 <resize_restart>
@@ -119,7 +118,7 @@ max_nonlinear_iter = 3
 file_type = hdf5
 dt = 528968040
 single_precision_output = true
-variables = prims.rho, prims.u, prims.uvec, prims.B, cons.fB, fflag, pflag, divB
+variables = prims.rho, prims.u, prims.uvec, prims.B, cons.B, cons.fB, fflag, pflag, divB
 ghost_zones = true
 
 <parthenon/output1>

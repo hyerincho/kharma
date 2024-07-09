@@ -117,6 +117,9 @@ def calc_rb(kwargs):
 @click.option("--one_trun", is_flag=True, help="For innermost and outermost annuli, run for 1 t_char instead of 2.")
 @click.option("--loctchar", is_flag=True, help="Use local charateristic time instead of capping it at the Bondi time.")
 @click.option("--bclean", is_flag=True, help="Clean divergence of B fields.")
+@click.option("--bclean_rel_tol", default=1.e-5, help="Relative tolerance for cleaning divergence of B fields.")
+@click.option("--bclean_abs_tol", default=1.e-9, help="Absolute tolerance for cleaning divergence of B fields.")
+@click.option("--bclean_normalized_divb", is_flag=True, help="Use normalized divb when cleaning divergence of B fields.")
 @click.option("--b_ct", is_flag=True, help="Use face-centered B fields instead of cell-centered.")
 @click.option("--derefine_poles", is_flag=True, help="Derefine poles for internal SMR.")
 @click.option("--derefine_nlevels", default=1, help="Derefine number of levels for internal SMR.")
@@ -125,6 +128,7 @@ def calc_rb(kwargs):
 @click.option("--bfluxc", is_flag=True, help="Apply Bflux-constant.")
 @click.option("--consistent_b", is_flag=True, help="Use consistent b field instead.")
 @click.option("--outflow_rout", is_flag=True, help="Use outflow bc at the outermost radius.")
+@click.option("--inverter", default="onedw", help="Inversion method.")
 # Don't use this
 @click.option("--start_time", default=0.0, help="Starting time. Only use if you know what you're doing.")
 def run_multizone(**kwargs):
@@ -185,6 +189,8 @@ def run_multizone(**kwargs):
         #    logrho = -4.200592800419657
         #    log_u_over_rho = -2.62430556
         if kwargs["gizmo"]:
+            args["parthenon/job/problem_id"] = "gizmo"
+            args["gizmo/datfn"] = kwargs["gizmo_fname"]
             # kwargs['r_b'] = 1e5
             logrho = -8.33399171  # -7.80243572
             log_u_over_rho = -5.34068635
@@ -199,6 +205,7 @@ def run_multizone(**kwargs):
         args["bondi/r_b"] = calc_rb(kwargs)
         args["bondi/ur_frac"] = kwargs["urfrac"]
         args["bondi/uphi"] = kwargs["uphi"]
+        args["inverter/type"] = kwargs["inverter"]
 
         # B field additions
         if kwargs["bz"] != 0.0:
@@ -209,7 +216,9 @@ def run_multizone(**kwargs):
             args["b_field/A0"] = kwargs["bz"]
             if kwargs["bclean"]:
                 args["b_field/initial_cleanup"] = 1
-                args["b_cleanup/rel_tolerance"] = 1.e-5
+                if kwargs["bclean_normalized_divb"]: args["b_cleanup/use_normalized_divb"] = 1
+                args["b_cleanup/rel_tolerance"] = kwargs["bclean_rel_tol"]#1.e-5
+                args["b_cleanup/abs_tolerance"] = kwargs["bclean_abs_tol"]#1.e-5
             if (kwargs["dont_kill_on_divb"]): args["b_field/kill_on_large_divb"] = 0
             if (kwargs["bfluxc"]): 
                 args["boundaries/average_EMF_inner_x1"] = 1
@@ -267,8 +276,6 @@ def run_multizone(**kwargs):
         args["GRMHD/cfl"] = kwargs["cfl"]
         args["coordinates/a"] = kwargs["spin"]
         args["coordinates/ext_g"] = kwargs["ext_g"]
-        args["bondi/use_gizmo"] = kwargs["gizmo"]
-        args["gizmo_shell/datfn"] = kwargs["gizmo_fname"]
         args["parthenon/time/nlim"] = kwargs["nlim"]
 
         # effective nzones (Hyerin 07/27/23)

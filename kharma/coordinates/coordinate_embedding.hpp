@@ -608,4 +608,25 @@ class CoordinateEmbedding {
             // Finally, apply any transform to native coordinates
             con_vec_to_native(Xnative, ucon_base, ucon_native);
         }
+        
+        /**
+         * Lower a contravariant 4-velocity in KS coordinates (optionally without time component)
+         */
+        KOKKOS_INLINE_FUNCTION void ks_lower_fourvel(const Real Xembed[GR_DIM], Real ucon_ks[GR_DIM], Real ucov_ks[GR_DIM]) const
+        {
+            // Set u^t to make u a velocity 4-vector in KS
+            GReal gcov_ks[GR_DIM][GR_DIM];
+            if (mpark::holds_alternative<SphKSCoords>(base) ||
+                mpark::holds_alternative<SphBLCoords>(base)) {
+                SphKSCoords(get_a()).gcov_embed(Xembed, gcov_ks);
+            } else if (mpark::holds_alternative<SphKSExtG>(base) ||
+                       mpark::holds_alternative<SphBLExtG>(base)) {
+                SphKSExtG(get_a()).gcov_embed(Xembed, gcov_ks);
+            }
+
+            set_ut(gcov_ks, ucon_ks);
+
+            DLOOP1 ucov_ks[mu] = 0.;
+            DLOOP2 ucov_ks[mu] += gcov_ks[mu][nu] * ucon_ks[nu]; // lower
+        }
 };

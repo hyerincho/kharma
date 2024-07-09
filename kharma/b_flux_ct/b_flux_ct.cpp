@@ -122,7 +122,8 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     std::vector<MetadataFlag> flags_emf = {Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy};
     m = Metadata(flags_emf, s_vector);
     pkg->AddField("emf", m);
-    if (packages->Get("Globals")->Param<std::string>("problem") == "resize_restart_kharma") {
+    auto problem_id = packages->Get("Globals")->Param<std::string>("problem");
+    if ((problem_id == "resize_restart_kharma") || (problem_id == "gizmo")) {
         m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::FillGhost, Metadata::Vector}, s_vector);
         pkg->AddField("B_Save", m);
     }
@@ -578,6 +579,8 @@ double MaxDivB(MeshData<Real> *md)
     const IndexRange kb = IndexRange{kbl.s, kbl.e + (ndim > 2)};
     const IndexRange block = IndexRange{0, B_U.GetDim(5)-1};
 
+    auto use_normalized = pmesh->packages.Get("B_Cleanup")->Param<bool>("use_normalized_divb");
+
     // TODO Keep zone of max! See timestep calc
     // Will need to translate them back to KS to make them useful though
 
@@ -594,7 +597,8 @@ double MaxDivB(MeshData<Real> *md)
         pmb->par_reduce("divB_max", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
             KOKKOS_LAMBDA (const int &k, const int &j, const int &i, double &local_result) {
                 const auto& G = B_U.GetCoords(b);
-                const double local_divb = m::abs(corner_div(G, B_U, b, k, j, i, ndim > 2));
+                const double local_divb = m::abs(corner_div(G, B_U, b, k, j, i, ndim > 2)) / (use_normalized? G.gdet(Loci::corner, j, i) : 1);
+                //const double local_divb = m::abs(corner_div(G, B_U, b, k, j, i, ndim > 2)) / (use_normalized? G.gdet(Loci::center, j, i) : 1);
                 if (local_divb > local_result) local_result = local_divb;
             }
         , max_reducer);

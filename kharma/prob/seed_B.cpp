@@ -102,6 +102,9 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
         n1tot = pin->GetInteger("parthenon/mesh", "restart_nx1");
         dx1 = (fx1max - fx1min) / n1tot;
         fx1min_ghost = fx1min - fnghost * dx1;
+    } else if (prob == "gizmo") {
+        fx1min = m::log(pin->GetReal("gizmo", "r_in"));
+        fx1min_ghost = fx1min;
     }
 
     // Indices
@@ -354,7 +357,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
             } else {
                 throw std::runtime_error("Must initialize 1D field directly!");
             }
-            if (prob == "resize_restart_kharma") {
+            if ((prob == "resize_restart_kharma") || (prob == "gizmo")) {
                 GridVector B_Save = rc->Get("B_Save").data;
                 // Hyerin (12/19/22) copy over data after initialization
                 pmb->par_for(
@@ -401,7 +404,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                 throw std::runtime_error("Must initialize 1D field directly!");
             }
 
-            if (prob == "resize_restart_kharma") {
+            if ((prob == "resize_restart_kharma") || (prob == "gizmo")) {
                 GridVector B_Save = rc->Get("B_Save").data;
                 // Hyerin (12/19/22) copy over data after initialization
                 pmb->par_for(
