@@ -118,12 +118,13 @@ def run_multizone(**kwargs):
         args['parthenon/job/problem_id'] = "resize_restart_kharma"
         args['resize_restart/base'] = base
         args['resize_restart/nzone'] = kwargs['nzones']
-        fn_dir = "../082423_n4" #"../073123_64_weno_g10" #"../072723_weno_g10" #"../071023_beta01" #"../072023_test_to_rst_frm" #
-        fname_num = 4040 #3510 #31549 #47341 #
-        fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
+        fn_dir = "../../070124_gizmo_64_all" #"../082423_n4" #"../073123_64_weno_g10" #"../072723_weno_g10" #"../071023_beta01" #"../072023_test_to_rst_frm" #
+        fname_num = 0 #4040 #3510 #31549 #47341 #
+        #fname = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num))[0]
+        fname = glob.glob(fn_dir+"/{:05d}/*now.rhdf".format(fname_num))[0]
         kwargs['start_time'] = pyharm.io.get_dump_time(fname)
-        fname_fill1 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
-        fname_fill2 = glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-2))[0]
+        fname_fill1 = "none" #glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-1))[0]
+        fname_fill2 = "none" #glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-2))[0]
         fname_fill3 = "none" #glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-3))[0]
         fname_fill4 = "none" #glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-4))[0]
         fname_fill5 = "none" #glob.glob(fn_dir+"/{:05d}/*final.rhdf".format(fname_num-5))[0]
@@ -132,7 +133,7 @@ def run_multizone(**kwargs):
         if kwargs['cleanup']:
             args['b_field/type'] = "vertical"
             args['b_field/initial_cleanup'] = 1
-            args['b_cleanup/rel_tolerance'] = 1e-3 #1e-2 # 
+            args['b_cleanup/rel_tolerance'] = 5e-2 # 1e-3 #
             args['b_cleanup/use_normalized_divb'] = 0 #1 #
 
         turn_around = kwargs['nzones'] - 1

@@ -26,6 +26,13 @@ if [[ "$ARGS" == *"rocky"* ]]; then
       #module load gcc/10.2.0-fasrc01 openmpi/4.1.0-fasrc01 cmake/3.25.2-fasrc01
       #export PATH=/n/home09/hyerincho/packages/hdf5-openmpi4.1.1:$PATH # comment this out if you are using module hdf5
     fi
+    if [[ "$ARGS" == *"2gpu"* ]]; then
+      # CUDA aware MPI
+      #module load ucx/1.14.1-fasrc02
+      MPI_NUM_PROCS=2
+      MPI_EXE="srun" #"mpirun" #
+      MPI_EXTRA_ARGS="--mpi=pmix"
+    fi
     
     export MPICH_GPU_SUPPORT_ENABLED=1
     #module load intel/23.0.0-fasrc01 openmpi/4.1.4-fasrc01 cmake/3.25.2-fasrc01
