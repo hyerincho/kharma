@@ -151,7 +151,7 @@ void ReadKharmaRestartHeader(std::string fname, std::unique_ptr<ParameterInput>&
     pin->SetReal("parthenon/mesh", "restart_x1max", fx1max);
     pin->SetInteger("parthenon/mesh", "restart_nghost", fnghost);
     pin->SetBoolean("parthenon/mesh", "restart_ghostzones", fghostzones);
-    pin->SetString("b_field", "type", fBfield); // (12/07/22) Hyerin need to test
+    //pin->SetString("b_field", "type", fBfield); // (12/07/22) Hyerin need to test
 
     Real tNow, dt, tf;
     tNow = restartReader->GetAttr<Real>("Info", "Time");
@@ -185,6 +185,7 @@ void ReadKharmaRestartHeader(std::string fname, std::unique_ptr<ParameterInput>&
     ReadFillFile(4, pin);
     ReadFillFile(5, pin);
     ReadFillFile(6, pin);
+    ReadFillFile(7, pin);
     /*
     Real fx1min_f1 = 0.;
     Real fx1max_f1 = 0.;
@@ -244,6 +245,8 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
     const Real fx1max_f5 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f5", -1);
     const Real fx1min_f6 = pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f6", -1);
     const Real fx1max_f6 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f6", -1);
+    const Real fx1min_f7 = pin->GetOrAddReal("parthenon/mesh", "restart_x1min_f7", -1);
+    const Real fx1max_f7 = pin->GetOrAddReal("parthenon/mesh", "restart_x1max_f7", -1);
     // TODO Hyerin (07/23/23) assume all the "fill" files have the same dimension.
     const int f_n1tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx1", -1);
     const int f_n2tot = pin->GetOrAddInteger("parthenon/mesh", "restart1_nx2", -1);
@@ -332,6 +335,10 @@ TaskStatus ReadKharmaRestart(MeshBlockData<Real> *rc, ParameterInput *pin)
         pmb->packages.Get("GRMHD")->AddParam<Real>("rx1min_f6", fx1min_f6);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1max_f6")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("rx1max_f6", fx1max_f6);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1min_f7")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("rx1min_f7", fx1min_f7);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rx1max_f7")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("rx1max_f7", fx1max_f7);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x1min")))
         pmb->packages.Get("GRMHD")->AddParam<Real>("x1min", x1min);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("x2min")))
@@ -435,6 +442,8 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     const Real fx1max_f5 = pmb->packages.Get("GRMHD")->Param<Real>("rx1max_f5");
     const Real fx1min_f6 = pmb->packages.Get("GRMHD")->Param<Real>("rx1min_f6");
     const Real fx1max_f6 = pmb->packages.Get("GRMHD")->Param<Real>("rx1max_f6");
+    const Real fx1min_f7 = pmb->packages.Get("GRMHD")->Param<Real>("rx1min_f7");
+    const Real fx1max_f7 = pmb->packages.Get("GRMHD")->Param<Real>("rx1max_f7");
     //const Real dx1 = (fx1max - fx1min) / n1tot;
     const Real x2min = pmb->packages.Get("GRMHD")->Param<Real>("x2min");
     const Real x2max = pmb->packages.Get("GRMHD")->Param<Real>("x2max");
@@ -972,12 +981,7 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
             KOKKOS_LAMBDA_3D {
                 GReal X[GR_DIM];
                 G.coord(k, j, i, Loci::center, X);
-                if ((X[1]>=fx1min_ghost) && (X[1]<=fx1max_ghost)) { // fill with the fname
-                    get_prim_restart_kharma(X, P, m_p, dx, length,
-                        x1_f_device, x2_f_device, x3_f_device, rho_f_device, u_f_device, uvec_f_device,
-                        k, j, i);
-                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_f_device, x2_f_device, x3_f_device, B_f_device, B_Save, k, j, i);
-                } else if ((should_fill1) && (X[1]>=fx1min_f1 - fnghost*dx[1]) && (X[1]<=fx1max_f1 + fnghost*dx[1])) { // fill with the fname_fill1
+                if ((should_fill1) && (X[1]>=fx1min_f1 - fnghost*dx[1]) && (X[1]<=fx1max_f1 + fnghost*dx[1])) { // fill with the fname_fill1
                     get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill1_device, x2_fill1_device, x3_fill1_device, rho_fill1_device, u_fill1_device, uvec_fill1_device,
                         k, j, i);
@@ -1008,11 +1012,16 @@ TaskStatus SetKharmaRestart(MeshBlockData<Real> *rc, IndexDomain domain, bool co
                         x1_fill6_device, x2_fill6_device, x3_fill6_device, rho_fill6_device, u_fill6_device, uvec_fill6_device,
                         k, j, i);
                     if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill6_device, x2_fill6_device, x3_fill6_device, B_fill6_device, B_Save, k, j, i);
-                } else if (should_fill7) { // fill with the fname_fill7
+                } else if ((should_fill7) && (X[1]>=fx1min_f7) && (X[1]<=fx1max_f7)) { // fill with the fname_fill7
                     get_prim_restart_kharma(X, P, m_p, dx, f_length,
                         x1_fill7_device, x2_fill7_device, x3_fill7_device, rho_fill7_device, u_fill7_device, uvec_fill7_device,
                         k, j, i);
                     if (include_B) get_B_restart_kharma(X, P, m_p, dx, f_length, x1_fill7_device, x2_fill7_device, x3_fill7_device, B_fill7_device, B_Save, k, j, i);
+                } else if ((X[1]>=fx1min_ghost) && (X[1]<=fx1max_ghost)) { // fill with the fname
+                    get_prim_restart_kharma(X, P, m_p, dx, length,
+                        x1_f_device, x2_f_device, x3_f_device, rho_f_device, u_f_device, uvec_f_device,
+                        k, j, i);
+                    if (include_B) get_B_restart_kharma(X, P, m_p, dx, length, x1_f_device, x2_f_device, x3_f_device, B_f_device, B_Save, k, j, i);
                 } else {
                     printf("HYERIN: no corresponding file found to fill!\n");
                 }
