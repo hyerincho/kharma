@@ -57,11 +57,11 @@ std::shared_ptr<KHARMAPackage> ISMR::Initialize(ParameterInput *pin, std::shared
     pkg->AddField("ismr.vars_avg", m);
     // ISMR caches: not evolved, immediately copied to fluid state after averaging
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
-    pkg->AddField("ismr_rho_avg", m);
-    pkg->AddField("ismr_u_avg", m);
+    pkg->AddField("ismr.rho_avg", m);
+    pkg->AddField("ismr.u_avg", m);
     std::vector<int> s_vector({NVEC});
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Vector}, s_vector);
-    pkg->AddField("ismr_uvec_avg", m);
+    pkg->AddField("ismr.uvec_avg", m);
 
     // Incompatible with B_FluxCT due to non-local divB, yell
     if (packages->AllPackages().count("B_FluxCT"))

@@ -281,13 +281,9 @@ TaskCollection KHARMADriver::MakeMultizoneTaskCollection(BlockList_t &blocks, in
         auto t_ptou = tl.AddTask(t_heat_electrons, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
 
         auto t_step_done = t_ptou;
-        auto& grmhd_pkg = pkgs.at("GRMHD")->AllParams();
-        if (use_b_ct && grmhd_pkg.Get<bool>("ismr_poles")) {
-            uint nlevels = grmhd_pkg.Get<uint>("ismr_nlevels");
-            if (nlevels > 0) {
-                auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get(), nlevels);
-                //t_step_done = t_derefine_poles;
-                //t_step_done = tl.AddTask(t_derefine_poles, Packages::MeshUtoP, md_sub_step_final.get(), IndexDomain::entire, false);
+        if (pkgs.count("ISMR")) {
+            if (pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
+                auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
                 auto t_floors_2 = tl.AddTask(t_derefine_poles, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
                 t_step_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
             } else {

@@ -249,8 +249,8 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     const auto& driver_pars = pmb->packages.Get("Driver")->AllParams();
 
     // Added by Hyerin (03/07/24)
-    bool ismr_poles = grmhd_pars.Get<bool>("ismr_poles");
-    uint ismr_nlevels = (ismr_poles) ? grmhd_pars.Get<uint>("ismr_nlevels") : 0;
+	const bool ismr_poles = pmesh->packages.AllPackages().count("ISMR");
+    const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
     const bool polar_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
     const bool polar_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
 
@@ -528,8 +528,8 @@ void UpdateAveragedCtop(MeshBlockData<Real> *rc)
     auto pmb = rc->GetBlockPointer();
     auto& params = pmb->packages.Get<KHARMAPackage>("Boundaries")->AllParams();
     auto& grmhd_pars = pmb->packages.Get("GRMHD")->AllParams();
-    bool ismr_poles = grmhd_pars.Get<bool>("ismr_poles");
-    uint nlevels = (ismr_poles) ? grmhd_pars.Get<uint>("ismr_nlevels") : 0;
+	bool ismr_poles = pmb->packages.AllPackages().count("ISMR");
+    uint nlevels = (ismr_poles) ? pmb->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
 
 	for (int i = 0; i < BOUNDARY_NFACES; i++) {
 		BoundaryFace bface = (BoundaryFace)i;

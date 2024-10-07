@@ -118,7 +118,7 @@ void FillOutput(MeshBlock *pmb, ParameterInput *pin);
 /**
  * Added by Hyerin (01/17/24) for de-refining the cells near the poles for a speed-up
  */
-TaskStatus DerefinePoles(MeshData<Real> *md, uint nlevels);
+TaskStatus DerefinePoles(MeshData<Real> *md);
 /**
  * Fill field "name" with divB
  */
