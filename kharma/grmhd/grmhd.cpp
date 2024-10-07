@@ -188,8 +188,8 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // INTERNAL SMR
     // TODO own package
     // internal SMR :Added by Hyerin (03/07/24)
-    bool ismr_poles = pin->GetOrAddBoolean("GRMHD", "ismr_poles", false);
-    params.Add("ismr_poles", ismr_poles);
+	const bool ismr_poles = pmesh->packages.AllPackages().count("ISMR");
+    const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
     if (ismr_poles) {
         uint ismr_nlevels = (uint) pin->GetOrAddInteger("GRMHD", "ismr_nlevels", 1);
         params.Add("ismr_nlevels", ismr_nlevels);

@@ -129,7 +129,7 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     // Hyerin (04/04/24) averaged B fields needed for ismr
     // ISMR cache: not evolved, immediately copied to fluid state after averaging
     m = Metadata({Metadata::Real, Metadata::Face, Metadata::Derived, Metadata::OneCopy});
-    pkg->AddField("ismr_fB_avg", m);
+    pkg->AddField("ismr.fB_avg", m);
 
     // CALLBACKS
 
@@ -656,12 +656,13 @@ void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
     );
 }
 
-TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
+TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
 {
     Flag("DerefinePoles");
     // HYERIN (01/17/24) this routine is not general yet and only applies to polar boundaries for now.
     //const IndexRange block = IndexRange{0, B_U.GetDim(5)-1};
     auto pmesh = md->GetMeshPointer();
+	const uint nlevels = pmesh->packages.Get("ISMR")->Param<uint>("nlevels");
 
     // Figure out indices
     IndexRange3 bCC, bF1, bF2, bF3;
@@ -671,14 +672,14 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
     for (auto &pmb : pmesh->block_list) {
         G = pmb->coords;
         auto& rc = pmb->meshblock_data.Get();
-        auto B_U = rc->PackVariables(std::vector<std::string>{"cons.fB"});
-        auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr_fB_avg"});
+        auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
+        auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr.fB_avg"});
         auto rho_U = rc->PackVariables(std::vector<std::string>{"cons.rho"});
-        auto rho_avg = rc->PackVariables(std::vector<std::string>{"ismr_rho_avg"});
+        auto rho_avg = rc->PackVariables(std::vector<std::string>{"ismr.rho_avg"});
         auto u_U = rc->PackVariables(std::vector<std::string>{"cons.u"});
-        auto u_avg = rc->PackVariables(std::vector<std::string>{"ismr_u_avg"});
+        auto u_avg = rc->PackVariables(std::vector<std::string>{"ismr.u_avg"});
         auto uvec_U = rc->PackVariables(std::vector<std::string>{"cons.uvec"});
-        auto uvec_avg = rc->PackVariables(std::vector<std::string>{"ismr_uvec_avg"});
+        auto uvec_avg = rc->PackVariables(std::vector<std::string>{"ismr.uvec_avg"});
         // TODO: eventually merge with the ismr branch like this
         PackIndexMap cons_map;
         auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell}, cons_map);
@@ -705,7 +706,6 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         int j_c, coarse_cell_len, ktemp, k_fine, k_start;
                         Real avg;
-                        //const auto& G = B_U.GetCoords(bl);
 
                         coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
                         j_c = j + ((binner) ? 0 : -1); // cell center
@@ -715,11 +715,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                         // average over fine cells within the coarse cell we're in
                         avg = 0.;
                         for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
-                            avg += B_U(F1, 0, k_start + ktemp, j_c, i) * G.Volume<F1>(k_start + ktemp, j_c, i);
+                            avg += B_Uf(F1, 0, k_start + ktemp, j_c, i) * G.Volume<F1>(k_start + ktemp, j_c, i);
                         avg /= coarse_cell_len;
 
                         B_avg(F1, 0, k, j_c, i) = avg;
-                        //if (i == bF1.is && j == jps && k == 10) printf("HYERIN: i %d B_U %.5g B_avg %.5g\n", i, B_U(bl)(F1, 0, k, j_c, i), avg/G.Volume<F1>(k, j_c, i));
                     }
                 );
                 // F2 average
@@ -727,7 +726,6 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         int coarse_cell_len, ktemp, k_fine, k_start;
                         Real avg;
-                        //const auto& G = B_U.GetCoords(bl);
 
                         coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
                         k_fine = (k - ng) % coarse_cell_len; // fine cell's k index within the coarse cell
@@ -738,7 +736,7 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                         } else { // average the fine cells
                             avg = 0.;
                             for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
-                                avg += B_U(F2, 0, k_start + ktemp, j, i) * G.Volume<F2>(k_start + ktemp, j, i);
+                                avg += B_Uf(F2, 0, k_start + ktemp, j, i) * G.Volume<F2>(k_start + ktemp, j, i);
                             avg /= coarse_cell_len;
 
                             B_avg(F2, 0, k, j, i) = avg;
@@ -750,7 +748,6 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         int j_c, coarse_cell_len, c_half, ktemp, k_fine, k_start, k_half, k_end, current_lv;
                         Real B_start, B_center, B_end;
-                        //const auto& G = B_U.GetCoords(bl);
 
                         current_lv = ((binner) ? jps - j : j - jps); // the current level of derefinement at given j
                         c_half = m::pow(2, current_lv); // half of the coarse cell's length
@@ -762,18 +759,18 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                         k_end  = k_start + coarse_cell_len; // end k-index of the coarse cell
 
                         if ((k - ng) % coarse_cell_len == 0) // at the faces of the coarse cells. Don't modify them.
-                            B_avg(F3, 0, k, j_c, i) = B_U(F3, 0, k, j_c, i) * G.Volume<F3>(k, j_c, i);
+                            B_avg(F3, 0, k, j_c, i) = B_Uf(F3, 0, k, j_c, i) * G.Volume<F3>(k, j_c, i);
                         else {
                             // F3: The internal faces will take care of the divB=0. The two faces of the coarse cell will remain unchanged.
                             //// First calculate the very central internal face. In other words, deal with the highest level internal face first.
                             //// Sum of F2 fluxes in the left and right half of the coarse cell each.
                             Real c_left_v = 0., c_right_v = 0.;
                             for (int ktemp = 0; ktemp < c_half; ++ktemp) {
-                                c_left_v  += B_U(F2, 0, k_half - 1 - ktemp, j + offset, i) * G.Volume<F2>(k_half - 1 - ktemp, j + offset, i);
-                                c_right_v += B_U(F2, 0, k_half   + ktemp, j + offset, i) * G.Volume<F2>(k_half     + ktemp, j + offset, i);
+                                c_left_v  += B_Uf(F2, 0, k_half - 1 - ktemp, j + offset, i) * G.Volume<F2>(k_half - 1 - ktemp, j + offset, i);
+                                c_right_v += B_Uf(F2, 0, k_half   + ktemp, j + offset, i) * G.Volume<F2>(k_half     + ktemp, j + offset, i);
                             }
-                            B_start = B_U(F3, 0, k_start, j_c, i) * G.Volume<F3>(k_start, j_c, i);
-                            B_end   = B_U(F3, 0, k_end,   j_c, i) * G.Volume<F3>(k_end,   j_c, i);
+                            B_start = B_Uf(F3, 0, k_start, j_c, i) * G.Volume<F3>(k_start, j_c, i);
+                            B_end   = B_Uf(F3, 0, k_end,   j_c, i) * G.Volume<F3>(k_end,   j_c, i);
                             B_center = (B_start + B_end + point_out * (c_right_v - c_left_v)) / 2.;
 
                             if (k == k_half) { // if at the center, then store the calculated value.
@@ -791,7 +788,6 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         int j_c, coarse_cell_len, ktemp, k_fine, k_start;
                         Real avg;
-                        //const auto& G = B_U.GetCoords(bl);
 
                         coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
                         j_c = j + ((binner) ? 0 : -1); // cell center
@@ -826,38 +822,58 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md, uint nlevels)
                 // F1 write
                 pmb->par_for("B_CT_derefine_poles_F1", bCC.ks, bCC.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                        //const auto& G = B_U.GetCoords(bl);
                         int j_c = j + ((binner) ? 0 : -1); // cell center
 
-                        B_U(F1, 0, k, j_c, i) = B_avg(F1, 0, k, j_c, i) / G.Volume<F1>(k, j_c, i);
+                        B_Uf(F1, 0, k, j_c, i) = B_avg(F1, 0, k, j_c, i) / G.Volume<F1>(k, j_c, i);
                     }
                 );
                 // F2 write
                 pmb->par_for("B_CT_derefine_poles_F2", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                        //const auto& G = B_U.GetCoords(bl);
 
-                        B_U(F2, 0, k, j, i) = B_avg(F2, 0, k, j, i) / G.Volume<F2>(k, j, i);
+                        B_Uf(F2, 0, k, j, i) = B_avg(F2, 0, k, j, i) / G.Volume<F2>(k, j, i);
                     }
                 );
                 // F3 write
                 pmb->par_for("B_CT_derefine_poles_F3", bF3.ks, bF3.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                        //const auto& G = B_U.GetCoords(bl);
                         int j_c = j + ((binner) ? 0 : -1); // cell center
 
-                        B_U(F3, 0, k, j_c, i) = B_avg(F3, 0, k, j_c, i) / G.Volume<F3>(k, j_c, i);
+                        B_Uf(F3, 0, k, j_c, i) = B_avg(F3, 0, k, j_c, i) / G.Volume<F3>(k, j_c, i);
                     }
                 );
                 // fluid variables write
                 pmb->par_for("B_CT_derefine_poles_fluid", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                        //const auto& G = B_U.GetCoords(bl);
                         int j_c = j + ((binner) ? 0 : -1); // cell center
 
                         rho_U(0, k, j_c, i) = rho_avg(0, k, j_c, i);
                         u_U(0, k, j_c, i) = u_avg(0, k, j_c, i);
                         VLOOP uvec_U(v, k, j_c, i) = uvec_avg(v, k, j_c, i);
+                    }
+                );
+				// Average the primitive vals to zone centers
+                const int ndim = rc->GetMeshPointer()->ndim;
+                auto B_U = rc->PackVariables(std::vector<std::string>{"cons.B"});
+                auto B_P = rc->PackVariables(std::vector<std::string>{"prims.B"});
+                pmb->par_for("UtoP_B_center", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+                        B_P(V1, k, j_c, i) = (B_Uf(F1, 0, k, j_c, i) / G.gdet(Loci::face1, j_c, i)
+                                        + B_Uf(F1, 0, k, j_c, i + 1) / G.gdet(Loci::face1, j_c, i + 1)) / 2;
+                        B_P(V2, k, j_c, i) = (ndim > 1) ? (B_Uf(F2, 0, k, j_c, i) / G.gdet(Loci::face2, j_c, i)
+                                                    + B_Uf(F2, 0, k, j_c + 1, i) / G.gdet(Loci::face2, j_c + 1, i)) / 2
+                                                    : B_Uf(F2, 0, k, j_c, i) / G.gdet(Loci::face2, j_c, i);
+                        B_P(V3, k, j_c, i) = (ndim > 2) ? (B_Uf(F3, 0, k, j_c, i) / G.gdet(Loci::face3, j_c, i)
+                                                    + B_Uf(F3, 0, k + 1, j_c, i) / G.gdet(Loci::face3, j_c, i)) / 2
+                                                    : B_Uf(F3, 0, k, j_c, i) / G.gdet(Loci::face3, j_c, i);
+                    }
+                );
+                // Recover conserved B at centers
+                pmb->par_for("UtoP_B_centerPtoU", 0, NVEC-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+                        B_U(v, k, j_c, i) = B_P(v, k, j_c, i) * G.gdet(Loci::center, j_c, i);
                     }
                 );
                 // UtoP for the GRMHD variables
