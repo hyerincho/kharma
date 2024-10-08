@@ -28,7 +28,7 @@ r_out = 134217728
 r_in = 1
 
 <parthenon/time>
-tlim = 10000000000
+tlim = 100000000000000000
 
 <GRMHD>
 cfl = 0.45
