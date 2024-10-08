@@ -95,6 +95,12 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real> *md)
         PackIndexMap cons_map;
         auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell, Metadata::Independent}, cons_map);
         auto vars_avg = rc->PackVariables(std::vector<std::string>{"ismr.vars_avg"});
+		auto rho_U = rc->PackVariables(std::vector<std::string>{"cons.rho"});
+        auto rho_avg = rc->PackVariables(std::vector<std::string>{"ismr.rho_avg"});
+        auto u_U = rc->PackVariables(std::vector<std::string>{"cons.u"});
+        auto u_avg = rc->PackVariables(std::vector<std::string>{"ismr.u_avg"});
+        auto uvec_U = rc->PackVariables(std::vector<std::string>{"cons.uvec"});
+        auto uvec_avg = rc->PackVariables(std::vector<std::string>{"ismr.uvec_avg"});
         const int nvar = vars.GetDim(4);
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
             BoundaryFace bface = (BoundaryFace) i;
@@ -111,35 +117,80 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real> *md)
                 const int jps = (binner) ? j_f + (nlevels - 1) : j_f - (nlevels - 1);
                 // Range of x2 to be de-refined
                 const IndexRange j_p = IndexRange{(binner) ? j_f : jps, (binner) ? jps : j_f};
+                
+				// fluid variables average TODO: separate this into a separate routine.
+                pmb->par_for("B_CT_derefine_poles_avg_fluid", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        int j_c, coarse_cell_len, ktemp, k_fine, k_start;
+                        Real avg;
 
+                        coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                        j_c = j + ((binner) ? 0 : -1); // cell center
+                        k_fine = (k - ng) % coarse_cell_len; // this fine cell's k-index within the coarse cell
+                        k_start = k - k_fine; // starting k-index of the coarse cell
+
+                        // rho
+                        avg = 0.;
+                        for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                            avg += rho_U(0, k_start + ktemp, j_c, i);
+                        avg /= coarse_cell_len;
+                        rho_avg(0, k, j_c, i) = avg;
+
+                        // u
+                        avg = 0.;
+                        for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                            avg += u_U(0, k_start + ktemp, j_c, i);
+                        avg /= coarse_cell_len;
+                        u_avg(0, k, j_c, i) = avg;
+
+                        // uvec
+                        VLOOP {
+                            avg = 0.;
+                            for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                                avg += uvec_U(v, k_start + ktemp, j_c, i);
+                            avg /= coarse_cell_len;
+                            uvec_avg(v, k, j_c, i) = avg;
+                        }
+                    }
+                );
+				// fluid variables write
+                pmb->par_for("B_CT_derefine_poles_fluid", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+
+                        rho_U(0, k, j_c, i) = rho_avg(0, k, j_c, i);
+                        u_U(0, k, j_c, i) = u_avg(0, k, j_c, i);
+                        VLOOP uvec_U(v, k, j_c, i) = uvec_avg(v, k, j_c, i);
+                    }
+                );
                 // TODO the following could be done in 1 kernel w/nested parallelism
                 // fluid variables average
-                pmb->par_for("DerefinePoles_avg_fluid", 0, nvar-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
-                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
-                        const int coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
-                        // cell center
-                        const int j_c = j + ((binner) ? 0 : -1);
-                        // this fine cell's k-index within the coarse cell
-                        const int k_fine = (k - ng) % coarse_cell_len;
-                        // starting k-index of the coarse cell
-                        const int k_start = k - k_fine;
+                //pmb->par_for("DerefinePoles_avg_fluid", 0, nvar-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                //    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                //        const int coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                //        // cell center
+                //        const int j_c = j + ((binner) ? 0 : -1);
+                //        // this fine cell's k-index within the coarse cell
+                //        const int k_fine = (k - ng) % coarse_cell_len;
+                //        // starting k-index of the coarse cell
+                //        const int k_start = k - k_fine;
 
-                        // average each var over next `coarse_cell_len` cells
-                        // Lots of repeated ops but we don't care, this is applied over a small region
-                        Real avg = 0.;
-                        for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
-                            avg += vars(v, k_start + ktemp, j_c, i);
-                        avg /= coarse_cell_len;
-                        vars_avg(v, k, j_c, i) = avg;
-                    }
-                );
+                //        // average each var over next `coarse_cell_len` cells
+                //        // Lots of repeated ops but we don't care, this is applied over a small region
+                //        Real avg = 0.;
+                //        for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                //            avg += vars(v, k_start + ktemp, j_c, i);
+                //        avg /= coarse_cell_len;
+                //        vars_avg(v, k, j_c, i) = avg;
+                //    }
+                //);
                 // fluid variables write
-                pmb->par_for("DerefinePoles_write_fluid", 0, nvar-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
-                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
-                        const int j_c = j + ((binner) ? 0 : -1); // cell center
-                        vars(v, k, j_c, i) = vars_avg(v, k, j_c, i);
-                    }
-                );
+                //pmb->par_for("DerefinePoles_write_fluid", 0, nvar-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                //    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                //        const int j_c = j + ((binner) ? 0 : -1); // cell center
+                //        vars(v, k, j_c, i) = vars_avg(v, k, j_c, i);
+                //    }
+                //);
 
                 // UtoP for the GRMHD variables
                 PackIndexMap prims_map;
