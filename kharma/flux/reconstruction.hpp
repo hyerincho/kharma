@@ -772,11 +772,7 @@ KOKKOS_INLINE_FUNCTION void ReconstructRowIsmr<Type::weno5_ismr, X1DIR>(partheno
                                         const int& k, const int& j, const int& is_l, const int& ie_l, 
                                         ScratchPad2D<Real> ql, ScratchPad2D<Real> qr, uint ismr_nlevels, int ng)
 {
-    if (j < ng + ismr_nlevels || j > P.GetDim(2) - 1 - ng - ismr_nlevels) {
-        KReconstruction::ReconstructX1<Type::linear_mc>(member, k, j, is_l, ie_l, P, ql, qr);
-    } else {
-        KReconstruction::ReconstructX1<Type::weno5>(member, k, j, is_l, ie_l, P, ql, qr);
-    }
+    KReconstruction::ReconstructX1<Type::weno5>(member, k, j, is_l, ie_l, P, ql, qr);
 }
 template <>
 KOKKOS_INLINE_FUNCTION void ReconstructRowIsmr<Type::weno5_ismr, X2DIR>(parthenon::team_mbr_t& member,

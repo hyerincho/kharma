@@ -81,10 +81,9 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(ParameterInput *pin, std::shared
         throw std::runtime_error("Cannot enable lowered reconstruction on edges and poles!");
     if ((lower_edges || lower_poles) && recon != "weno5")
         throw std::runtime_error("Lowered reconstructions can only be enabled with weno5!");
-    bool use_ismr = packages.AllPackages().count("ISMR");
 
     int stencil = 0;
-    if (use_ismr) {
+    if (pin->GetOrAddBoolean("ismr", "on", false)) {
         // Override for ismr
         params.Add("recon", KReconstruction::Type::weno5_ismr);
         pin->SetString("flux", "reconstruction", "weno5_ismr");

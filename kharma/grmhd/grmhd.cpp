@@ -185,23 +185,6 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // No magnetic fields here. KHARMA should operate fine in GRHD without them,
     // so they are allocated only by B field packages.
 
-    // INTERNAL SMR
-    // TODO own package
-    // internal SMR :Added by Hyerin (03/07/24)
-	const bool ismr_poles = pmesh->packages.AllPackages().count("ISMR");
-    const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
-    if (ismr_poles) {
-        uint ismr_nlevels = (uint) pin->GetOrAddInteger("GRMHD", "ismr_nlevels", 1);
-        params.Add("ismr_nlevels", ismr_nlevels);
-
-        // ISMR caches: not evolved, immediately copied to fluid state after averaging
-        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
-        pkg->AddField("ismr_rho_avg", m);
-        pkg->AddField("ismr_u_avg", m);
-        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Vector}, s_vector);
-        pkg->AddField("ismr_uvec_avg", m);
-    }
-
     // A KHARMAPackage also contains quite a few "callbacks," or functions called at
     // specific points in a step if the package is loaded.
     // Generally, see the headers for function descriptions.
@@ -249,8 +232,8 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     const auto& driver_pars = pmb->packages.Get("Driver")->AllParams();
 
     // Added by Hyerin (03/07/24)
-	const bool ismr_poles = pmesh->packages.AllPackages().count("ISMR");
-    const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
+	const bool ismr_poles = pmb->packages.AllPackages().count("ISMR");
+    const uint ismr_nlevels = (ismr_poles) ? pmb->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
     const bool polar_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
     const bool polar_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
 
