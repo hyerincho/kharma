@@ -39,6 +39,7 @@
 #include "boundaries.hpp"
 #include "coordinate_utils.hpp"
 #include "domain.hpp"
+#include "flux.hpp"
 #include "fm_torus.hpp"
 #include "grmhd_functions.hpp"
 
@@ -215,6 +216,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
         // Require and load what we need if necessary
         Real A0 = pin->GetOrAddReal("b_field", "A0", 0.);
         Real min_A = pin->GetOrAddReal("b_field", "min_A", 0.2);
+        Real r_mag = pin->GetOrAddReal("b_field", "r_mag", 400.);
         // Init-specific loads
         Real a, rin, rmax, gam, kappa, rho_norm, arg1, n, rs, rb;
         Real tilt = 0; // Needs to be initialized
@@ -306,7 +308,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                     }
                 }
 
-                Real Aphi = seed_a<Seed>(Xmidplane, dxc, rho_av, rin, min_A, A0, arg1, rb);
+                Real Aphi = seed_a<Seed>(Xmidplane, dxc, rho_av, rin, min_A, A0, arg1, rb, r_mag);
 
                 if (tilt != 0.0) {
                     // This is *covariant* A_mu of an untilted disk
@@ -515,6 +517,7 @@ TaskStatus NormalizeBField(MeshData<Real> *md, ParameterInput *pin)
     } else {
         beta_min = MPIReduce_once(MinBeta(md), MPI_MIN);
     }
+    Real norm = m::sqrt(beta_min/desired_beta_min);
 
     if (MPIRank0() && verbose > 0) {
         if (beta_calc_legacy) {
@@ -522,14 +525,16 @@ TaskStatus NormalizeBField(MeshData<Real> *md, ParameterInput *pin)
             std::cout << "Pressure max pre-norm: " << p_max << std::endl;
         }
         std::cout << "Beta min pre-norm: " << beta_min << std::endl;
+        std::cout << "Normalizing by: " << norm << std::endl;
     }
 
     // Then normalize B by sqrt(beta/beta_min)
     if (beta_min > 0) {
-        Real norm = m::sqrt(beta_min/desired_beta_min);
-        for (auto &pmb : pmesh->block_list) {
-            auto& rc = pmb->meshblock_data.Get();
-            KHARMADriver::Scale(std::vector<std::string>{"prims.B"}, rc.get(), norm);
+        if (pmesh->packages.AllPackages().count("B_CT")) {
+            KHARMADriver::ScaleFace(std::vector<std::string>{"cons.fB"}, md, norm);
+            B_CT::MeshUtoP(md, IndexDomain::entire);
+        } else {
+            KHARMADriver::Scale(std::vector<std::string>{"prims.B", "cons.B"}, md, norm);
         }
     } // else yell?
 
