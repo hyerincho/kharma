@@ -514,8 +514,11 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
         auto uvec_U = rc->PackVariables(std::vector<std::string>{"cons.uvec"});
         auto uvec_avg = rc->PackVariables(std::vector<std::string>{"ismr.uvec_avg"});
         // TODO: eventually merge with the ismr branch like this
-        PackIndexMap cons_map;
-        auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell}, cons_map);
+        PackIndexMap cons_map, cons_map_utop;
+        auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell, Metadata::Independent}, cons_map);
+        auto vars_avg = rc->PackVariables(std::vector<std::string>{"ismr.vars_avg"});
+        auto vars_utop = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell}, cons_map_utop);
+        const int nvar = vars.GetDim(4);
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
             BoundaryFace bface = (BoundaryFace) i;
             auto bname = KBoundaries::BoundaryName(bface);
@@ -616,6 +619,61 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                         }
                     }
                 );
+                //// fluid variables average TODO: separate this into a separate routine.
+                //pmb->par_for("B_CT_derefine_poles_avg_fluid", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                //    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                //        int j_c, coarse_cell_len, ktemp, k_fine, k_start;
+                //        Real avg;
+
+                //        coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                //        j_c = j + ((binner) ? 0 : -1); // cell center
+                //        k_fine = (k - ng) % coarse_cell_len; // this fine cell's k-index within the coarse cell
+                //        k_start = k - k_fine; // starting k-index of the coarse cell
+
+                //        // rho
+                //        avg = 0.;
+                //        for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                //            avg += rho_U(0, k_start + ktemp, j_c, i);
+                //        avg /= coarse_cell_len;
+                //        rho_avg(0, k, j_c, i) = avg;
+
+                //        // u
+                //        avg = 0.;
+                //        for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                //            avg += u_U(0, k_start + ktemp, j_c, i);
+                //        avg /= coarse_cell_len;
+                //        u_avg(0, k, j_c, i) = avg;
+
+                //        // uvec
+                //        VLOOP {
+                //            avg = 0.;
+                //            for (ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                //                avg += uvec_U(v, k_start + ktemp, j_c, i);
+                //            avg /= coarse_cell_len;
+                //            uvec_avg(v, k, j_c, i) = avg;
+                //        }
+                //    }
+                //);
+                // fluid variables average // TODO: start again from here! do nvar and see if this still keeps the avg okay
+                pmb->par_for("DerefinePoles_avg_fluid", 0, nvar-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                        const int coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                        // cell center
+                        const int j_c = j + ((binner) ? 0 : -1);
+                        // this fine cell's k-index within the coarse cell
+                        const int k_fine = (k - ng) % coarse_cell_len;
+                        // starting k-index of the coarse cell
+                        const int k_start = k - k_fine;
+
+                        // average each var over next `coarse_cell_len` cells
+                        // Lots of repeated ops but we don't care, this is applied over a small region
+                        Real avg = 0.;
+                        for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                            avg += vars(v, k_start + ktemp, j_c, i);
+                        avg /= coarse_cell_len;
+                        vars_avg(v, k, j_c, i) = avg;
+                    }
+                );
 
                 // F1 write
                 pmb->par_for("B_CT_derefine_poles_F1", bCC.ks, bCC.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
@@ -638,6 +696,23 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                         int j_c = j + ((binner) ? 0 : -1); // cell center
 
                         B_Uf(F3, 0, k, j_c, i) = B_avg(F3, 0, k, j_c, i) / G.Volume<F3>(k, j_c, i);
+                    }
+                );
+                //// fluid variables write
+                //pmb->par_for("B_CT_derefine_poles_fluid", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                //    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                //        int j_c = j + ((binner) ? 0 : -1); // cell center
+                //
+                //        rho_U(0, k, j_c, i) = rho_avg(0, k, j_c, i);
+                //        u_U(0, k, j_c, i) = u_avg(0, k, j_c, i);
+                //        VLOOP uvec_U(v, k, j_c, i) = uvec_avg(v, k, j_c, i);
+                //    }
+                //);
+                // fluid variables write
+                pmb->par_for("DerefinePoles_write_fluid", 0, nvar-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                        const int j_c = j + ((binner) ? 0 : -1); // cell center
+                        vars(v, k, j_c, i) = vars_avg(v, k, j_c, i);
                     }
                 );
 				// Average the primitive vals to zone centers
@@ -664,6 +739,27 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                         B_U(v, k, j_c, i) = B_P(v, k, j_c, i) * G.gdet(Loci::center, j_c, i);
                     }
                 );
+                // UtoP for the GRMHD variables
+                PackIndexMap prims_map;
+                auto P = rc->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("Primitive"), Metadata::Cell}, prims_map);
+                VarMap m_u(cons_map_utop, true), m_p(prims_map, false);
+                const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
+                const Floors::Prescription floors = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
+                pmb->par_for("DerefinePoles_UtoP", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        const int j_c = j + ((binner) ? 0 : -1); // cell center
+                        // The usual inverter is not EMHD-aware, so it's going to dump all of T into the
+                        // ideal GRMHD fluid variables
+                        Inverter::u_to_p<Inverter::Type::onedw>(G, vars_utop, m_u, gam, k, j_c, i, P, m_p, Loci::center,
+                                            floors, 8, 1e-8);
+                        // Consistent with that, we zero out the EMHD extra variables.  This switches theories to
+                        // evolving ideal GRMHD in ISMR region, but conserves the components of T themselves
+                        if (m_u.Q >= 0) vars_utop(m_u.Q, k, j_c, i) = 0.;
+                        if (m_p.Q >= 0) P(m_p.Q, k, j_c, i) = 0.;
+                        if (m_u.DP >= 0) vars_utop(m_u.DP, k, j_c, i) = 0.;
+                        if (m_p.DP >= 0) P(m_p.DP, k, j_c, i) = 0.;
+                    }
+                );
             }
         }
     }
@@ -671,7 +767,6 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
 
     return TaskStatus::complete;
 }
-
 double B_CT::MaxDivB(MeshData<Real> *md)
 {
     auto pmesh = md->GetMeshPointer();

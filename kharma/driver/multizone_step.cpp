@@ -42,7 +42,6 @@
 #include "electrons.hpp"
 #include "grmhd.hpp"
 #include "inverter.hpp"
-#include "ismr.hpp"
 #include "multizone.hpp"
 #include "wind.hpp"
 // Other headers
@@ -282,13 +281,14 @@ TaskCollection KHARMADriver::MakeMultizoneTaskCollection(BlockList_t &blocks, in
         auto t_ptou = tl.AddTask(t_heat_electrons, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
 
         auto t_step_done = t_ptou;
-        if (pkgs.count("ISMR") && pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
-            auto t_derefine_b = t_ptou;
-            if (pkgs.count("B_CT"))
-                t_derefine_b = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
-            auto t_derefine_f = tl.AddTask(t_derefine_b, ISMR::DerefinePoles, md_sub_step_final.get());
-            auto t_floors_2 = tl.AddTask(t_derefine_f, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
-            t_step_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
+        if (pkgs.count("ISMR")) {
+            if (pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
+                auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
+                auto t_floors_2 = tl.AddTask(t_derefine_poles, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
+                t_step_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
+            } else {
+                printf("WARNING: internal SMR near the poles is requested, but the number of levels should be >= 1. Not operating internal SMR.\n");
+            }
         }
     }
 
