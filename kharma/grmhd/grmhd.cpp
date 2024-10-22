@@ -219,7 +219,7 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     const auto& G = pmb->coords;
 	
 	// If we have to recompute ctop anywhere, we do it now
-    UpdateAveragedCtop(rc);
+    if (pmb->packages.AllPackages().count("ISMR")) UpdateAveragedCtop(rc);
 
     auto& cmax = rc->Get("Flux.cmax").data;
     auto& cmin = rc->Get("Flux.cmin").data;

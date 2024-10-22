@@ -190,6 +190,7 @@ TaskCollection KHARMADriver::MakeMultizoneTaskCollection(BlockList_t &blocks, in
         // t_start_recv_flux = tl.AddTask(t_none, parthenon::StartReceiveFluxCorrections, md_sub_step_init);
         // auto t_emf = t_start_recv_flux;
         if (use_b_ct) {
+            // TODO: add comment here, sliding doesn't work
             auto t_emf_bounds = KHARMADriver::AddBoundarySync(t_start_recv_flux, tl, md_emf_only);
             auto t_emf = t_emf_bounds;
             // for (int i=0; i < num_blocks; i++) {
@@ -211,10 +212,10 @@ TaskCollection KHARMADriver::MakeMultizoneTaskCollection(BlockList_t &blocks, in
         auto &md_sub_step_init  = pmesh->mesh_data.GetOrAdd(integrator->stage_name[stage - 1], i);
         auto &md_sub_step_final = pmesh->mesh_data.GetOrAdd(integrator->stage_name[stage], i);
         auto &md_flux_src       = pmesh->mesh_data.GetOrAdd("dUdt", i);
-        auto &md_emf_only = pmesh->mesh_data.AddShallow("EMF_"+std::to_string(i), md_sub_step_init, std::vector<std::string>{"B_CT.emf"});
         if (is_active[i]) {
             auto t_emf_seams = t_none;
             if (use_b_ct) {
+                auto &md_emf_only = pmesh->mesh_data.AddShallow("EMF_"+std::to_string(i), md_sub_step_init, std::vector<std::string>{"B_CT.emf"});
                 // Correct the EMFs of active zones
                 t_emf_seams = tl.AddTask(t_none, Multizone::AverageEMFSeams, md_emf_only.get(), apply_boundary_condition[i]);
             }
@@ -264,32 +265,35 @@ TaskCollection KHARMADriver::MakeMultizoneTaskCollection(BlockList_t &blocks, in
 
         auto t_fix_p = tl.AddTask(t_floors, Inverter::MeshFixUtoP, md_sub_step_final.get());
 
-        auto t_set_bc = tl.AddTask(t_fix_p, parthenon::ApplyBoundaryConditionsOnCoarseOrFineMD, md_sync, false);
 
-        auto t_prim_source = t_set_bc; //t_fix_p;
-        if (stage == integrator->nstages) {
-            t_prim_source = tl.AddTask(t_set_bc, Packages::MeshApplyPrimSource, md_sub_step_final.get()); //t_fix_p
-        }
+        // (10/22/24) HYERIN: we don't care about hubble or electron heating for now!
+        //auto t_prim_source = t_set_bc; //t_fix_p;
+        //if (stage == integrator->nstages) {
+        //    t_prim_source = tl.AddTask(t_set_bc, Packages::MeshApplyPrimSource, md_sub_step_final.get()); //t_fix_p
+        //}
         // Electron heating goes where it does in HARMDriver, for the same reasons
-        auto t_heat_electrons = t_prim_source;
-        if (use_electrons) {
-            t_heat_electrons = tl.AddTask(t_prim_source, Electrons::MeshApplyElectronHeating,
-                                          md_sub_step_init.get(), md_sub_step_final.get(), stage == 1); // bool is generate_grf
-        }
+        //auto t_heat_electrons = t_prim_source;
+        //if (use_electrons) {
+        //    t_heat_electrons = tl.AddTask(t_prim_source, Electrons::MeshApplyElectronHeating,
+        //                                  md_sub_step_init.get(), md_sub_step_final.get(), stage == 1); // bool is generate_grf
+        //}
 
-        // Make sure *all* conserved vars are synchronized at step end
-        auto t_ptou = tl.AddTask(t_heat_electrons, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
-
-        auto t_step_done = t_ptou;
+        auto t_ismr_done = t_fix_p;
         if (pkgs.count("ISMR")) {
             if (pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
+                auto t_ptou = tl.AddTask(t_fix_p, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
                 auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
                 auto t_floors_2 = tl.AddTask(t_derefine_poles, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
-                t_step_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
+                t_ismr_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
             } else {
                 printf("WARNING: internal SMR near the poles is requested, but the number of levels should be >= 1. Not operating internal SMR.\n");
             }
         }
+        
+        auto t_set_bc = tl.AddTask(t_ismr_done, parthenon::ApplyBoundaryConditionsOnCoarseOrFineMD, md_sync, false);
+
+        // Make sure *all* conserved vars are synchronized at step end
+        auto t_step_done = tl.AddTask(t_set_bc, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
     }
 
     EndFlag();
