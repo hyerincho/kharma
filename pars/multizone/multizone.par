@@ -82,7 +82,7 @@ kill_on_large_divb = 0
 <debug>
 verbose = 1
 flag_verbose = 2
-extra_checks = 1
+extra_checks = 0
 
 <driver>
 type = multizone
