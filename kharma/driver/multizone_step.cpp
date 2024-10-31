@@ -310,7 +310,8 @@ TaskCollection KHARMADriver::MakeMultizoneTaskCollection(BlockList_t &blocks, in
             auto &md_sub_step_final = pmesh->mesh_data.GetOrAdd(integrator->stage_name[stage], i);
             auto &md_sync = pmesh->mesh_data.AddShallow("sync"+integrator->stage_name[stage]+std::to_string(i), md_sub_step_final, sync_vars);
             //KHARMADriver::AddFullSyncRegion(tc, md_sync);
-            AddBoundarySync(t_none, bound_sync[i], md_sync);
+            auto t_two_sync = AddBoundarySync(t_none, bound_sync[i], md_sync);
+            auto t_two_sync_done = bound_sync[i].AddTask(t_two_sync, Flux::MeshPtoU, md_sync.get(), IndexDomain::entire, false);
         }
     }
 
