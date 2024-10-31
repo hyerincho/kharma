@@ -68,6 +68,8 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     params.Add("long_t_in", long_t_in);
     const bool combine_out = pin->GetOrAddBoolean("multizone", "combine_out", false); // combine outer annuli
     params.Add("combine_out", combine_out);
+    const bool combine_two_largest = pin->GetOrAddBoolean("multizone", "combine_two_largest", false); // combine two largest annuli
+    params.Add("combine_two_largest", combine_two_largest);
     
     
     // mutable parameters - V cycle information
@@ -95,7 +97,7 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     if (combine_out) {
         Real r_b = CalcRB(gam, rs);
         nzones_eff = (int) m::ceil(m::log(r_b) / m::log(base));
-    }
+    } else if (combine_two_largest) nzones_eff -= 1;
     params.Add("nzones_eff", nzones_eff);
 
     // also save active rin and rout as mutable parameters
@@ -128,7 +130,6 @@ void Multizone::DecideActiveBlocksAndBoundaryConditions(Mesh *pmesh, const SimTi
     const Real gam = pmesh->packages.Get("GRMHD")->Param<Real>("gamma");
     const Real f_tchar = params.Get<Real>("f_tchar");
     const bool loc_tchar = params.Get<bool>("loc_tchar");
-    const bool combine_out = params.Get<bool>("combine_out");
     const int active_rin = params.Get<int>("active_rin");
     const int active_rout = params.Get<int>("active_rout");
     const auto outer_x1_btype_name = params_bdry.Get<std::string>("outer_x1");
@@ -222,6 +223,7 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
     const bool one_trun = params.Get<bool>("one_trun");
     const int long_t_in = params.Get<int>("long_t_in");
     const bool combine_out = params.Get<bool>("combine_out");
+    const bool combine_two_largest = params.Get<bool>("combine_two_largest");
     const bool move_rin = params.Get<bool>("move_rin");
     const int nzones_per_vcycle = 2 * (nzones_eff - 1);
     
@@ -251,7 +253,7 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
         // Range of radii that is active
         int active_rout;
         int active_rin = m::pow(base, i_zone);
-        if ((move_rin) || (combine_out && (i_zone == nzones_eff - 1))) active_rout = m::pow(base, nzones + 1);
+        if ((move_rin) || ((combine_out || combine_two_largest) && (i_zone == nzones_eff - 1))) active_rout = m::pow(base, nzones + 1);
         else active_rout =  m::pow(base, i_zone + 2);
         params.Update<int>("active_rin", active_rin);
         params.Update<int>("active_rout", active_rout);
