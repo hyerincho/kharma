@@ -105,6 +105,8 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     const int active_rout_init = m::pow(base, nzones + 1);
     params.Add("active_rin", active_rin_init, true);
     params.Add("active_rout", active_rout_init, true);
+    params.Add("active_iin", -1, true);
+    params.Add("active_iout", -1, true);
 
     //pkg->BlockUtoP = Electrons::BlockUtoP;
     //pkg->BoundaryUtoP = Electrons::BlockUtoP;
@@ -198,6 +200,20 @@ void Multizone::DecideActiveBlocksAndBoundaryConditions(Mesh *pmesh, const SimTi
 
 }
 
+void Multizone::GetActiveZoneBoundary(Mesh *pmesh)
+{
+    Flag("GetActiveZoneBoundary");
+    auto &params = pmesh->packages.Get("Multizone")->AllParams();
+    const int active_rin = params.Get<int>("active_rin");
+    const int active_rout = params.Get<int>("active_rout");
+    Real active_x1min = m::log(active_rin);
+    Real active_x1max = m::log(active_rout);
+    const auto &G = pmesh->block_list[0]->coords;
+    const Real dx1 = G.Dxc<1>(0);
+    const Real x1min = G.GetXmin()[0];
+    params.Update<int>("active_iin", (int) ((active_x1min - x1min) / dx1));
+    params.Update<int>("active_iout", (int) ((active_x1max - x1min) / dx1));
+}
 
 //TaskStatus Multizone::DecideToSwitch(MeshData<Real> *md, const SimTime &tm, bool &switch_zone)
 void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
@@ -312,6 +328,27 @@ TaskStatus Multizone::AverageEMFSeams(MeshData<Real> *md_emf_only, bool *apply_b
     return TaskStatus::complete;
 }
 
+TaskStatus Multizone::AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only)
+{
+    Flag("AverageEMFSeams");
+    auto &params = md_emf_only->GetMeshPointer()->packages.Get("Multizone")->AllParams();
+    const bool bflux_const = params.Get<bool>("bflux_const");
+
+    for (int i=0; i < BOUNDARY_NFACES; i++) {
+        auto& rc = md_emf_only->GetBlockData(0); // Only one block
+        // This is the only thing in the MeshData we're passed anyway...
+        auto& emfpack = rc->PackVariables(std::vector<std::string>{"B_CT.emf"});
+        if (bflux_const) {
+            B_CT::AverageBoundaryEMF(rc.get(),
+                                    KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
+                                    emfpack, false, true);
+        } // TODO: only supporting bfluxc for now
+    }
+
+    EndFlag();
+    return TaskStatus::complete;
+}
+
 TaskStatus Multizone::PostStepDiagnostics(const SimTime& tm, MeshData<Real> *rc)
 {
     Flag("PostStepDiagnostics");
@@ -336,3 +373,92 @@ void Multizone::DumpBeforeSwitch(Mesh *pmesh, ParameterInput *pin, const SimTime
     }
 }
 
+TaskStatus Multizone::ExtendedDirichlet(MeshData<Real> *source, MeshData<Real> *dest, const bool do_face)
+{
+    Flag("ExtendedDirichlet");
+    auto pmesh = source->GetMeshPointer();
+    auto pmesh_dest = dest->GetMeshPointer();
+    const int active_iin = pmesh->packages.Get("Multizone")->Param<int>("active_iin");
+    const int active_iout = pmesh->packages.Get("Multizone")->Param<int>("active_iout");
+
+    Multizone::ExtendedDirichletCell(source, dest, active_iin, active_iout);
+    if (do_face) Multizone::ExtendedDirichletFace(source, dest, active_iin, active_iout);
+    //printf("HYERIN: active_rin and active_rout are %d %d each.\n", active_rin, active_rout);
+    //const int num_blocks = pmesh->block_list.size();
+    //    
+    //// Get Cell centered variables
+    //std::vector<MetadataFlag> flags_cell = {Metadata::Cell, Metadata::FillGhost}; 
+    //auto vars = source->PackVariables(flags_cell);
+    //auto vars_dest = dest->PackVariables(flags_cell);
+    //const int nvar = vars.GetDim(4);
+    //
+    //// Figure out indices
+    //const IndexRange3 b = KDomain::GetRange(source, IndexDomain::entire);
+    //auto pmb0 = source->GetBlockData(0)->GetBlockPointer();
+    //pmb0->par_for("Multizone_overwrite_cell_values", 0, num_blocks-1, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+    //    KOKKOS_LAMBDA (const int &b, const int &v, const int &k, const int &j, const int &i) {
+    //        const auto& G = vars.GetCoords(b);
+    //        if (G.r(k, j, i) < active_rin || G.r(k, j, i) > active_rout) {
+    //            if (k==32 && j==32 && i==32) printf("HYERIN: for b=%d v=%d vars_dest %.8g vars %.8g \n", b, v, vars_dest(b,v,k,j,i), vars(b,v,k,j,i));
+    //            vars_dest(b, v, k, j, i) = vars(b, v, k, j, i);
+    //        }
+    //    }
+    //);
+
+    //TODO HYERIN: do face centered too
+    EndFlag();
+    return TaskStatus::complete;
+}
+
+// TODO: only supporting cell, or face centered for now
+// Apply Extended Dirichlet condition for cell-centered
+void Multizone::ExtendedDirichletCell(MeshData<Real> *source, MeshData<Real> *dest, const int active_iin, const int active_iout) 
+{
+    // Get variables
+    std::vector<MetadataFlag> flags = {Metadata::Cell, Metadata::GetUserFlag("Explicit")}; // prims and cons of rho, u, uvec, B (cell-centered)
+    auto vars = source->PackVariables(flags);
+    auto vars_dest = dest->PackVariables(flags);
+    const int nvar = vars.GetDim(4);
+    const int num_blocks = source->GetMeshPointer()->block_list.size();
+    
+    // Apply Extended Dirichlet
+    const IndexRange3 b = KDomain::GetRange(source, IndexDomain::entire, CC);
+    auto pmb0 = source->GetBlockData(0)->GetBlockPointer();
+    pmb0->par_for("Multizone_overwrite_values", 0, num_blocks-1, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+        KOKKOS_LAMBDA (const int &b, const int &v, const int &k, const int &j, const int &i) {
+            if (i < active_iin || i > active_iout - 1) {
+                vars_dest(b, v, k, j, i) = vars(b, v, k, j, i);
+            }
+        }
+    );
+}
+
+// Apply Extended Dirichlet condition for face-centered
+void Multizone::ExtendedDirichletFace(MeshData<Real> *source, MeshData<Real> *dest, const int active_iin, const int active_iout) 
+{
+    // Get variables
+    auto B = source->PackVariables(std::vector<std::string>{"cons.fB"});
+    auto B_dest = dest->PackVariables(std::vector<std::string>{"cons.fB"});
+    const int num_blocks = source->GetMeshPointer()->block_list.size();
+    
+    // Apply Extended Dirichlet
+    auto pmb0 = source->GetBlockData(0)->GetBlockPointer();
+    //Real active_x1min = m::log(active_rin);
+    //Real active_x1max = m::log(active_rout);
+    for (auto &dir : {X1DIR, X2DIR, X3DIR}) {
+        TE el = FaceOf(dir);
+        //Loci loc = loc_of(dir);
+        IndexRange3 b = KDomain::GetRange(source, IndexDomain::entire, el);
+        pmb0->par_for("Multizone_overwrite_values", 0, num_blocks-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+            KOKKOS_LAMBDA (const int &b, const int &k, const int &j, const int &i) {
+                //const auto& G = B.GetCoords(b);
+                //GReal X[GR_DIM];
+                //G.coord(k, j, i, loc, X);
+                //if (X[1] < active_x1min + G.Dxc<1>(0) / 2. || X[1] > active_x1max - G.Dxc<1>(0) / 2.) {
+                if (i < active_iin + (dir == X1DIR) || i > active_iout - 1) {
+                    B_dest(b, el, 0, k, j, i) = B(b, el, 0, k, j, i);
+                }
+            }
+        );
+    }
+}

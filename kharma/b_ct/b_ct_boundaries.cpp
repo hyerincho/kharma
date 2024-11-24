@@ -64,7 +64,7 @@ void B_CT::ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const Va
     }
 }
 
-void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse)
+void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse, bool extended_dirichlet)
 {
     auto pmb = rc->GetBlockPointer();
     const BoundaryFace bface = KBoundaries::BoundaryFaceOf(domain);
@@ -73,6 +73,16 @@ void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const
     const bool binner = KBoundaries::BoundaryIsInner(bface);
     const int ndim = KDomain::GetNDim(rc);
     int reflecting_x2 = (pmb->boundary_flag[BoundaryFace::inner_x2] != BoundaryFlag::periodic); // just assume that it's reflecting if not periodic for now
+    int active_i_bdr;
+    if (extended_dirichlet) {
+        auto &params = pmb->packages.Get("Multizone")->AllParams();
+        int active_iin = params.Get<int>("active_iin");
+        int active_iout = params.Get<int>("active_iout");
+        active_i_bdr = (binner) ? active_iin: active_iout;
+        const int ng = Globals::nghost;
+        const int n1 = pmb->cellbounds.ncellsi(IndexDomain::entire);
+        if (active_i_bdr <= ng || active_i_bdr >= n1 - ng) return;
+    }
 
     for (auto &el : OrthogonalEdges(bdir)) {
         if ((bdir == X2DIR && el == E3 && pmb->coords.coords.is_spherical()) || 
@@ -80,8 +90,12 @@ void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const
             // X3 EMF must be zero *on* polar face, since edge size is 0
             // or if X2 boundary is reflecting, then EMF3 is set to 0 to avoid conflict with reflecting bc
             IndexRange3 b = KDomain::GetBoundaryRange(rc, domain, el, coarse);
+            // TODO: set i_range 
+            IndexRange i_range;
+            if (extended_dirichlet && bdir == X1DIR) i_range = {active_i_bdr, active_i_bdr};
+            else i_range = {b.is, b.ie};
             pmb->par_for(
-                "zero_polar_EMF3_" + bname, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+                "zero_polar_EMF3_" + bname, b.ks, b.ke, b.js, b.je, i_range.s, i_range.e,
                 KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                     emfpack(el, 0, k, j, i) = 0;
                 }
@@ -98,6 +112,7 @@ void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const
             IndexRange outer;
             if (bdir == X1DIR) {
                 cface = (binner) ? bi.is : bi.ie;
+                if (extended_dirichlet && bdir == X1DIR) cface = active_i_bdr;
                 if (el == E2) { // for bfluxc
                     outer = {b.js, b.je};
                     inner_dir = X3DIR;

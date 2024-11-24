@@ -123,4 +123,11 @@ TaskStatus DecideNextActiveBlocks(MeshData<Real> *md, const SimTime &tm, const i
  */
 TaskStatus AverageEMFSeams(MeshData<Real> *md_emf_only, bool *apply_boundary_condition);
 
+// HYERIN (11/20/24) for fastvc_faster
+TaskStatus ExtendedDirichlet(MeshData<Real> *source, MeshData<Real> *dest, const bool do_face);
+void ExtendedDirichletCell(MeshData<Real> *source, MeshData<Real> *dest, const int active_rin, const int active_rout);
+void ExtendedDirichletFace(MeshData<Real> *source, MeshData<Real> *dest, const int active_rin, const int active_rout);
+void GetActiveZoneBoundary(Mesh *pmesh);
+TaskStatus AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only);
+
 } // Multizone

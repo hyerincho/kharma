@@ -139,7 +139,7 @@ void ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const Variable
 /**
  * Average all EMFs corresponding to the coordinate pole location, e.g. usually all E1 on X2 faces
  */
-void AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse);
+void AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse, bool extended_dirichlet=false);
 
 /**
  * Subtract the average B3 from each face, as if a loop reconnected across the polar boundary.
