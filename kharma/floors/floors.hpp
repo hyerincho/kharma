@@ -41,6 +41,7 @@
 #include "grmhd_functions.hpp"
 #include "emhd.hpp"
 #include "reductions.hpp"
+#include "kharma_driver.hpp"
 
 namespace Floors {
 

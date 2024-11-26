@@ -215,7 +215,15 @@ TaskStatus Floors::DetermineGRMHDFloors(MeshData<Real> *md, IndexDomain domain,
 
     const IndexRange3 b = KDomain::GetRange(md, domain);
     const IndexRange block = IndexRange{0, P.GetDim(5) - 1};
-    pmb0->par_for("determine_floors", block.s, block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+    const bool multizone_onemb = (pmb0->packages.Get("Driver")->Param<DriverType>("type") == DriverType::multizone_onemb);
+    int active_iin, active_iout;
+    IndexRange i_range = {b.is, b.ie};
+    if (multizone_onemb) {
+        active_iin = pmb0->packages.Get("Multizone")->Param<int>("active_iin");
+        active_iout = pmb0->packages.Get("Multizone")->Param<int>("active_iout");
+        i_range = {active_iin, active_iout - 1};
+    }
+    pmb0->par_for("determine_floors", block.s, block.e, b.ks, b.ke, b.js, b.je, i_range.s, i_range.e,
         KOKKOS_LAMBDA (const int &b, const int &k, const int &j, const int &i) {
             const auto& G = P.GetCoords(b);
             fflag(b, 0, k, j, i) = static_cast<int>(fflag(b, 0, k, j, i)) |

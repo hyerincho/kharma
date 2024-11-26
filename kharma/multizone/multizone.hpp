@@ -109,7 +109,7 @@ void DecideActiveBlocksAndBoundaryConditions(Mesh *pmesh, const SimTime &tm, boo
  * 
  */
 //TaskStatus DecideToSwitch(MeshData<Real> *md, const SimTime &tm, bool &switch_zone);
-void DecideToSwitch(Mesh *pmesh, const SimTime &tm);
+void DecideToSwitch(Mesh *pmesh, const SimTime &tm, bool verbose=false);
 
 /**
  * Decide which blocks are active for the next step and progress in the V cycle, in order to determine dt
@@ -125,8 +125,8 @@ TaskStatus AverageEMFSeams(MeshData<Real> *md_emf_only, bool *apply_boundary_con
 
 // HYERIN (11/20/24) for fastvc_faster
 TaskStatus ExtendedDirichlet(MeshData<Real> *source, MeshData<Real> *dest, const bool do_face);
-void ExtendedDirichletCell(MeshData<Real> *source, MeshData<Real> *dest, const int active_rin, const int active_rout);
-void ExtendedDirichletFace(MeshData<Real> *source, MeshData<Real> *dest, const int active_rin, const int active_rout);
+void ExtendedDirichletCell(MeshData<Real> *source, MeshData<Real> *dest, const int active_iin, const int active_iout);
+void ExtendedDirichletFace(MeshData<Real> *source, MeshData<Real> *dest, const int active_iin, const int active_iout);
 void GetActiveZoneBoundary(Mesh *pmesh);
 TaskStatus AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only);
 

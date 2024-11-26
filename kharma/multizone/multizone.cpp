@@ -107,6 +107,8 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     params.Add("active_rout", active_rout_init, true);
     params.Add("active_iin", -1, true);
     params.Add("active_iout", -1, true);
+    std::vector<Real> dt_init(nzones_eff, pin->GetReal("parthenon/time", "dt_min"));
+    params.Add("dt_last_zone", dt_init, true);
 
     //pkg->BlockUtoP = Electrons::BlockUtoP;
     //pkg->BoundaryUtoP = Electrons::BlockUtoP;
@@ -216,7 +218,7 @@ void Multizone::GetActiveZoneBoundary(Mesh *pmesh)
 }
 
 //TaskStatus Multizone::DecideToSwitch(MeshData<Real> *md, const SimTime &tm, bool &switch_zone)
-void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
+void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm, bool verbose)
 {
     Flag("DecideToSwitch");
     //auto pmesh = md->GetMeshPointer();
@@ -249,10 +251,12 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
     Real t0_zone = params.Get<Real>("t0_zone"); // time at zone-switching
     int n0_zone = params.Get<int>("n0_zone"); // cycle at zone-switching
     int i_zone = m::abs(i_within_vcycle - (nzones_eff - 1)); // zone number. zone-0 is the smallest annulus.
+    auto dt_last_zone = params.Get<std::vector<Real>>("dt_last_zone");
     
     // If determined to switch zones, update teh zones accordingly
     bool switch_zone = params.Get<bool>("switch_zone");
     if (switch_zone) {
+        dt_last_zone[i_zone] = tm.dt;
         i_within_vcycle += 1;
         if (i_within_vcycle >= nzones_per_vcycle) { // if completed a V-cycle
             i_within_vcycle -= nzones_per_vcycle;
@@ -265,6 +269,7 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
         n0_zone = tm.ncycle;
         params.Update<Real>("t0_zone", t0_zone);
         params.Update<int>("n0_zone", n0_zone);
+        params.Update<std::vector<Real>>("dt_last_zone", dt_last_zone);
         
         // Range of radii that is active
         int active_rout;
@@ -273,6 +278,7 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm)
         else active_rout =  m::pow(base, i_zone + 2);
         params.Update<int>("active_rin", active_rin);
         params.Update<int>("active_rout", active_rout);
+        if (verbose) std::cout << "i_within_vcycle" << i_within_vcycle << " i_zone " << i_zone << " i_vcycle " << i_vcycle << " active_rout " << active_rout << " active_rin " << active_rin << std::endl;
     }
 
     // Determine if the zone should be switched next
@@ -335,14 +341,17 @@ TaskStatus Multizone::AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only)
     const bool bflux_const = params.Get<bool>("bflux_const");
 
     for (int i=0; i < BOUNDARY_NFACES; i++) {
-        auto& rc = md_emf_only->GetBlockData(0); // Only one block
-        // This is the only thing in the MeshData we're passed anyway...
-        auto& emfpack = rc->PackVariables(std::vector<std::string>{"B_CT.emf"});
-        if (bflux_const) {
-            B_CT::AverageBoundaryEMF(rc.get(),
-                                    KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
-                                    emfpack, false, true);
-        } // TODO: only supporting bfluxc for now
+        BoundaryFace bface = (BoundaryFace) i;
+        if (KBoundaries::BoundaryDirection(bface) == X1DIR) {
+            auto& rc = md_emf_only->GetBlockData(0); // Only one block
+            // This is the only thing in the MeshData we're passed anyway...
+            auto& emfpack = rc->PackVariables(std::vector<std::string>{"B_CT.emf"});
+            if (bflux_const) {
+                B_CT::AverageBoundaryEMF(rc.get(),
+                                        KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
+                                        emfpack, false, true);
+            } // TODO: only supporting bfluxc for now
+        }
     }
 
     EndFlag();

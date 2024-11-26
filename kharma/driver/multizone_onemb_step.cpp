@@ -60,7 +60,7 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
     // Reminder that this list is created BEFORE any of the list contents are run!
     // Prints or function calls here will likely not do what you want: instead, add to the list by calling tl.AddTask()
     if (stage == 1)
-        Multizone::DecideToSwitch(pmesh, tm);
+        Multizone::DecideToSwitch(pmesh, tm, true);
         Multizone::GetActiveZoneBoundary(pmesh);
 
     // TaskCollections are a collection of TaskRegions.
@@ -88,7 +88,6 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
     const bool use_jcon = pkgs.count("Current");
     const int active_rin = multizone_pkg.Get<int>("active_rin");
     const int active_rout = multizone_pkg.Get<int>("active_rout");
-    std::cout << "HYERIN: active_rin " << active_rin << " and active_rout " << active_rout << std::endl;
     const int num_partitions = pmesh->DefaultNumPartitions();
 
     // Allocate/copy the things we need
@@ -102,15 +101,6 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
             pmesh->mesh_data.Add(integrator->stage_name[i]);
         // Preserve state
         pmesh->mesh_data.Add("preserve");
-        // Above only copies on allocate -- ensure we copy every step
-        //Copy<MeshData<Real>>(std::vector<MetadataFlag>{Metadata::Cell}, base.get(), pmesh->mesh_data.Get("preserve").get());
-        //for (int i = 0; i < num_partitions; i++) {
-        //    auto &full_step_init = pmesh->mesh_data.GetOrAdd("base", i);
-        //    printf("HYERIN: here1a\n");
-        //    auto &preserve = pmesh->mesh_data.GetOrAdd("preserve", i);
-        //    printf("HYERIN: here1b\n");
-        //    Copy<MeshData<Real>>(std::vector<MetadataFlag>{Metadata::Cell}, full_step_init.get(), preserve.get());
-        //}
         // FOFC needs to determine whether the "real" U-divF will violate floors, and needs a safe place to do it.
         // We populate it later, with each *sub-step*'s initial state
         if (use_fofc) {
@@ -160,8 +150,6 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         auto &md_sub_step_init  = pmesh->mesh_data.GetOrAdd(integrator->stage_name[stage - 1], i);
         auto &md_sub_step_final = pmesh->mesh_data.GetOrAdd(integrator->stage_name[stage], i);
         auto &md_flux_src       = pmesh->mesh_data.GetOrAdd("dUdt", i);
-        // TODO this doesn't work still for some reason, even if the shallow copy has all variables
-        auto &md_sync = pmesh->mesh_data.AddShallow("sync"+integrator->stage_name[stage]+std::to_string(i), md_sub_step_final, sync_vars);
 
         // HYERIN (11/20/24) the following paragraph is only needed for SMR/AMR
         // Start receiving flux corrections and ghost cells
@@ -189,26 +177,19 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         auto t_fix_flux = tl.AddTask(t_fluxes, Packages::FixFlux, md_sub_step_init.get());
 
         // If we're in AMR, correct fluxes from neighbors
-        auto t_flux_bounds = t_fix_flux;
+        auto t_emf = t_fix_flux;
         if (pmesh->multilevel || use_b_ct) {
-            auto t_emf = t_flux_bounds;
             if (use_b_ct) {
                 // Pull out a container of only EMF to synchronize
-                auto &md_emf_only = pmesh->mesh_data.AddShallow("EMF", std::vector<std::string>{"B_CT.emf"}); // TODO this gets weird if we partition
                 auto t_emf_local = tl.AddTask(t_flux_bounds, B_CT::CalculateEMF, md_sub_step_init.get());
+                auto &md_emf_only = pmesh->mesh_data.AddShallow("EMF", md_sub_step_init, std::vector<std::string>{"B_CT.emf"});
                 auto t_emf_seams = tl.AddTask(t_emf_local, Multizone::AverageEMFSeamsOnemb, md_emf_only.get());
                 t_emf = KHARMADriver::AddBoundarySync(t_emf_seams, tl, md_emf_only);
             }
-            //auto t_load_send_flux = tl.AddTask(t_emf, parthenon::LoadAndSendFluxCorrections, md_sub_step_init);
-            //auto t_recv_flux = tl.AddTask(t_load_send_flux, parthenon::ReceiveFluxCorrections, md_sub_step_init);
-            //t_flux_bounds = tl.AddTask(t_recv_flux, parthenon::SetFluxCorrections, md_sub_step_init);
-            
-            // TODO HYERIN(11/20/24): here needs the internal boundary conditions
-
         }
 
         // Apply the fluxes to calculate a change in cell-centered values "md_flux_src"
-        auto t_flux_div = tl.AddTask(t_flux_bounds, FluxDivergence, md_sub_step_init.get(), md_flux_src.get(),
+        auto t_flux_div = tl.AddTask(t_emf, FluxDivergence, md_sub_step_init.get(), md_flux_src.get(),
                                      std::vector<MetadataFlag>{Metadata::Independent, Metadata::Cell, Metadata::WithFluxes}, 0);
 
         // Add any source terms: geometric \Gamma * T, wind, damping, etc etc
@@ -222,6 +203,7 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
 
         // HYERIN (11/20/24) Overwrite
         auto t_dirichlet = tl.AddTask(t_update, Multizone::ExtendedDirichlet, md_preserve.get(), md_sub_step_final.get(), use_b_ct);
+        auto &md_sync = pmesh->mesh_data.AddShallow("sync"+integrator->stage_name[stage]+std::to_string(i), md_sub_step_final, sync_vars);
         KHARMADriver::AddBoundarySync(t_dirichlet, tl, md_sync); // TODO HYERIN: this includes applying the boundary conditions. I would need to overwrite here too then
     }
 
@@ -314,7 +296,7 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         
         // TODO HYERIN (11/20/24) do I need this PtoU again?
         // Make sure *all* conserved vars are synchronized at step end
-        auto t_step_done = tl.AddTask(t_set_bc, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
+        //auto t_step_done = tl.AddTask(t_set_bc, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
         
 
         // HYERIN (11/20/24) moved timestep estimation to the top of the step
@@ -358,6 +340,8 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
             // TODO: check if this is still true. HYERIN (11/20/24) Why are the cons variables not synced well at the internal boundaries? see 10/23/24 email with Ben for example with cons.uvec.
             // Thus we need another PtoU here.
             //auto t_bounds_done = tl.AddTask(t_sync, Flux::MeshPtoU, md_sync.get(), IndexDomain::entire, false);
+            //
+            //TODO: it seems like two_sync is essential! otherwise, B_U(F3) at k=4 and k=-4 are vastly different than k=n3/2. Figure out why. The x2 x3 corner B3 seems to be higher. only for ISMR case.
         }
     }
 

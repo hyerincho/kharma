@@ -237,6 +237,12 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     const uint ismr_nlevels = (ismr_poles) ? pmb->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
     const bool polar_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
     const bool polar_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
+    const bool multizone_onemb = (driver_pars.Get<DriverType>("type") == DriverType::multizone_onemb);
+    int active_iin, active_iout;
+    if (multizone_onemb) {
+        active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
+        active_iout = pmb->packages.Get("Multizone")->Param<int>("active_iout");
+    }
 
     if (!globals.Get<bool>("in_loop")) {
         if (grmhd_pars.Get<bool>("start_dt_light") ||
@@ -285,6 +291,11 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
             double ndt_zone = 1 / (1 / (G.Dxc<1>(i) /  m::max(cmax(0, k, j, i), cmin(0, k, j, i))) +
                                    1 / (G.Dxc<2>(j) /  m::max(cmax(1, k, j, i), cmin(1, k, j, i))) +
                                    1 / (G.Dxc<3>(k) * ismr_factor /  m::max(cmax(2, k, j, i), cmin(2, k, j, i))));
+            if (multizone_onemb) {
+                if (i < active_iin || i > active_iout - 1) {
+                    ndt_zone = std::numeric_limits<Real>::max();
+                }
+            }
 
             if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
                 local_result = ndt_zone;
@@ -302,14 +313,24 @@ Real EstimateTimestep(MeshBlockData<Real> *rc)
     const double dt_min = grmhd_pars.Get<double>("dt_min");
     const double dt_last = globals.Get<double>("dt_last");
     double dt_last_block = dt_last;
-    //if (driver_pars.Get<DriverType>("type") == DriverType::multizone) {
-        //auto &mz_pars = pmb->packages.Get("Multizone")->AllParams();
+    dt_last_block = pmb->NewNonMaxDt();
+    if (multizone_onemb) {
+        auto &mz_pars = pmb->packages.Get("Multizone")->AllParams();
+        int n0_zone = mz_pars.Get<int>("n0_zone"); // cycle at zone-switching
+        int ncycle = globals.Get<int>("ncycle");
+        // if we just switched, set dt_max to last_dt of the current zone
+        if (ncycle == n0_zone && ncycle > 0) {
+            auto dt_last_zone = mz_pars.Get<std::vector<Real>>("dt_last_zone");
+            int i_within_vcycle = mz_pars.Get<int>("i_within_vcycle"); // current i_within_vcycle
+            int nzones_eff = mz_pars.Get<int>("nzones_eff");
+            int i_zone = m::abs(i_within_vcycle - (nzones_eff - 1)); // zone number. zone-0 is the smallest annulus.
+            dt_last_block = dt_last_zone[i_zone];
+        }
         //const Real base = mz_pars.Get<Real>("base");
         //const int i_within_vcycle = mz_pars.Get<int>("i_within_vcycle");
         //const bool out_to_in = (i_within_vcycle > 0) && ((i_within_vcycle - (nzones - 1)) <= 0);  // are we in the inward moving leg of the V-cycle?
-        //dt_max_mz = dt_last * m::pow(base, (-3.0 / 2.0 * out_to_in));
-    dt_last_block = pmb->NewNonMaxDt();
-    //}
+        //dt_last_block = dt_last * m::pow(base, (-3.0 / 2.0 * out_to_in));
+    }
     const double dt_max = dt_last_block; //grmhd_pars.Get<double>("max_dt_increase") * dt_last_block;
     const double ndt = clip(min_ndt * cfl, dt_min, dt_max);
 

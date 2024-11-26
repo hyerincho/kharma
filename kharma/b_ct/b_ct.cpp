@@ -496,6 +496,12 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
     //const IndexRange block = IndexRange{0, B_U.GetDim(5)-1};
     auto pmesh = md->GetMeshPointer();
 	const uint nlevels = pmesh->packages.Get("ISMR")->Param<uint>("nlevels");
+    const bool multizone_onemb = (pmesh->packages.Get("Driver")->Param<DriverType>("type") == DriverType::multizone_onemb);
+    int active_iin, active_iout;
+    if (multizone_onemb) {
+        active_iin = pmesh->packages.Get("Multizone")->Param<int>("active_iin");
+        active_iout = pmesh->packages.Get("Multizone")->Param<int>("active_iout");
+    }
 
     // Figure out indices
     IndexRange3 bCC, bF1, bF2, bF3;
@@ -529,6 +535,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                 // indices
                 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
                 bF1 = KDomain::GetRange(rc, domain, F1, ng, -ng);
+                if (multizone_onemb) {
+                    bF1.is = active_iin; bF1.ie = active_iout;
+                    bCC.is = active_iin; bCC.ie = active_iout - 1;
+                }
                 bF2 = KDomain::GetRange(rc, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false);
                 bF3 = KDomain::GetRange(rc, domain, F3, ng, -ng);
                 j_f = (binner) ? bF2.je : bF2.js; // last physical face

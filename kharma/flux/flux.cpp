@@ -312,11 +312,20 @@ TaskStatus Flux::BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool coa
 
     // Indices
     auto bounds = coarse ? pmb->c_cellbounds : pmb->cellbounds;
-    const IndexRange ib = bounds.GetBoundsI(domain);
+    IndexRange ib = bounds.GetBoundsI(domain);
     const IndexRange jb = bounds.GetBoundsJ(domain);
     const IndexRange kb = bounds.GetBoundsK(domain);
 
     const auto& G = pmb->coords;
+        
+    // HYERIN
+    const bool multizone_onemb = (pmb->packages.Get("Driver")->Param<DriverType>("type") == DriverType::multizone_onemb);
+    int active_iin, active_iout;
+    if (multizone_onemb) {
+        active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
+        active_iout = pmb->packages.Get("Multizone")->Param<int>("active_iout");
+        ib.s = active_iin; ib.e = active_iout - 1;
+    }
 
     pmb->par_for("p_to_u", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {

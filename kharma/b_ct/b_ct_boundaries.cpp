@@ -81,7 +81,7 @@ void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const
         active_i_bdr = (binner) ? active_iin: active_iout;
         const int ng = Globals::nghost;
         const int n1 = pmb->cellbounds.ncellsi(IndexDomain::entire);
-        if (active_i_bdr <= ng || active_i_bdr >= n1 - ng) return;
+        if (active_i_bdr <= ng || active_i_bdr >= n1 - ng) return; // Don't apply at innermost and outermost boundaries
     }
 
     for (auto &el : OrthogonalEdges(bdir)) {

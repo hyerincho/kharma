@@ -73,6 +73,7 @@ std::shared_ptr<KHARMAPackage> KHARMA::InitializeGlobals(ParameterInput *pin, st
     // Current time in the simulation.  For ramping things up, ramping things down,
     // or preventing bad outcomes at known times
     params.Add("time", 0.0, true);
+    params.Add("ncycle", 0, true);
     // Last step's dt (Parthenon SimTime tm.dt), which must be preserved to output jcon
     params.Add("dt_last", 0.0, true);
     // Whether we are computing initial outputs/timestep, or versions in the execution loop
@@ -128,6 +129,7 @@ void KHARMA::PreStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm)
     }
     globals.Update<double>("dt_last", tm.dt);
     globals.Update<double>("time", tm.time);
+    globals.Update<int>("ncycle", tm.ncycle);
 }
 
 void KHARMA::PostStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm)
@@ -141,6 +143,7 @@ void KHARMA::PostStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm)
     auto& globals = pmesh->packages.Get("Globals")->AllParams();
     globals.Update<double>("dt_last", tm.dt);
     globals.Update<double>("time", tm.time);
+    globals.Update<int>("ncycle", tm.ncycle);
 }
 
 void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
