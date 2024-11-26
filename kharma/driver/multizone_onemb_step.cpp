@@ -181,7 +181,7 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         if (pmesh->multilevel || use_b_ct) {
             if (use_b_ct) {
                 // Pull out a container of only EMF to synchronize
-                auto t_emf_local = tl.AddTask(t_flux_bounds, B_CT::CalculateEMF, md_sub_step_init.get());
+                auto t_emf_local = tl.AddTask(t_fix_flux, B_CT::CalculateEMF, md_sub_step_init.get());
                 auto &md_emf_only = pmesh->mesh_data.AddShallow("EMF", md_sub_step_init, std::vector<std::string>{"B_CT.emf"});
                 auto t_emf_seams = tl.AddTask(t_emf_local, Multizone::AverageEMFSeamsOnemb, md_emf_only.get());
                 t_emf = KHARMADriver::AddBoundarySync(t_emf_seams, tl, md_emf_only);
