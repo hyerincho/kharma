@@ -92,7 +92,9 @@ KOKKOS_INLINE_FUNCTION Real CalcDuration(const int i_zone, const int nzones_eff,
         if ((! loc_tchar) && (i_zone == nzones_eff - 1)) switch_criterion /= f_cap_ncycle;
         return switch_criterion;
     } else {
-        Real temp_rin = m::pow(base, i_zone);
+        int offset = 0;
+        if (base < 8) offset = ((int) m::ceil(m::log(8) / m::log(base))) - 1;
+        Real temp_rin = m::pow(base, i_zone + offset);
         Real runtime_per_zone = f_tchar * CalcRuntime(temp_rin, base, gam, bondi_rs, loc_tchar);
         return runtime_per_zone * longer_factor;
     }

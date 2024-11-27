@@ -80,14 +80,11 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
     // Which packages we load affects which tasks we'll add to the list
     auto& pkgs = pmesh->packages.AllPackages();
     auto& flux_pkg   = pkgs.at("Flux")->AllParams();
-    auto& multizone_pkg   = pkgs.at("Multizone")->AllParams();
     const bool use_b_cleanup = pkgs.count("B_Cleanup");
     const bool use_b_ct = pkgs.count("B_CT");
     const bool use_electrons = pkgs.count("Electrons");
     const bool use_fofc = flux_pkg.Get<bool>("use_fofc");
     const bool use_jcon = pkgs.count("Current");
-    const int active_rin = multizone_pkg.Get<int>("active_rin");
-    const int active_rout = multizone_pkg.Get<int>("active_rout");
     const int num_partitions = pmesh->DefaultNumPartitions();
 
     // Allocate/copy the things we need

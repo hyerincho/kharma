@@ -94,14 +94,19 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     
     // Calculate effective number of zones
     int nzones_eff = nzones;
+    int offset = 0; // number of innermost zones to combine
     if (combine_out) {
         Real r_b = CalcRB(gam, rs);
         nzones_eff = (int) m::ceil(m::log(r_b) / m::log(base));
     } else if (combine_two_largest) nzones_eff -= 1;
+    if (base < 8.0) {
+        offset = ((int) m::ceil(m::log(8.0) / m::log(base))) - 1;
+        nzones_eff = nzones_eff - offset;
+    }
     params.Add("nzones_eff", nzones_eff);
 
     // also save active rin and rout as mutable parameters
-    const int active_rin_init = m::pow(base, nzones_eff - 1);
+    const int active_rin_init = m::pow(base, nzones_eff + offset - 1);
     const int active_rout_init = m::pow(base, nzones + 1);
     params.Add("active_rin", active_rin_init, true);
     params.Add("active_rout", active_rout_init, true);
@@ -273,9 +278,11 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm, bool verbose)
         
         // Range of radii that is active
         int active_rout;
-        int active_rin = m::pow(base, i_zone);
+        int offset = 0;
+        if (base < 8 && i_zone > 0) offset = ((int) m::ceil(m::log(8) / m::log(base))) - 1;
+        int active_rin = m::pow(base, i_zone + offset);
         if ((move_rin) || ((combine_out || combine_two_largest) && (i_zone == nzones_eff - 1))) active_rout = m::pow(base, nzones + 1);
-        else active_rout =  m::pow(base, i_zone + 2);
+        else active_rout =  m::pow(base, i_zone + offset + 2);
         params.Update<int>("active_rin", active_rin);
         params.Update<int>("active_rout", active_rout);
         if (verbose) std::cout << "i_within_vcycle" << i_within_vcycle << " i_zone " << i_zone << " i_vcycle " << i_vcycle << " active_rout " << active_rout << " active_rin " << active_rin << std::endl;
@@ -283,27 +290,17 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm, bool verbose)
 
     // Determine if the zone should be switched next
     switch_zone = false; // default
-    //Real temp_rin, runtime_per_zone;
-    //int longer_factor = 1;
-    //if ((i_zone == nzones_eff - 1) && !one_trun) longer_factor = 2;
-    //if (i_zone == 0) longer_factor = long_t_in;
 
     Real switch_criterion = CalcDuration(i_zone, nzones_eff, one_trun, long_t_in, ncycle_per_zone, loc_tchar, f_cap_ncycle, base, f_tchar, gam, bondi_rs);
 
     if (ncycle_per_zone > 0) {
-        //Real switch_criterion = ncycle_per_zone * longer_factor;
-        //if (! loc_tchar && i_zone == nzones_eff - 1) switch_criterion /= f_cap_ncycle;
         switch_zone = (next_ncycle - n0_zone) >= switch_criterion;
     } else {
-        //temp_rin = m::pow(base, i_zone);
-        //runtime_per_zone = f_tchar * CalcRuntime(temp_rin, base, gam, bondi_rs, loc_tchar);
         switch_zone = (next_time - t0_zone) > switch_criterion; //runtime_per_zone * longer_factor;
-        //std::cout << "time now " << tm.time << ", t0_zone " << t0_zone << ", runtime_per_zone " << runtime_per_zone << std::endl;
     }
     params.Update<bool>("switch_zone", switch_zone);
 
     EndFlag();
-    //return TaskStatus::complete;
 }
 
 
@@ -374,7 +371,12 @@ void Multizone::DumpBeforeSwitch(Mesh *pmesh, ParameterInput *pin, const SimTime
     auto &params = pmesh->packages.Get("Multizone")->AllParams();
     const int ncycle_per_zone = params.Get<int>("ncycle_per_zone");
     const bool switch_zone = params.Get<bool>("switch_zone");
-    if (switch_zone) {
+    const int i_within_vcycle = params.Get<int>("i_within_vcycle");
+    const int nzones_eff = params.Get<int>("nzones_eff");
+    int i_zone = m::abs(i_within_vcycle - (nzones_eff - 1));
+    bool dump_now = switch_zone;
+    if ((ncycle_per_zone < 100) && (i_zone != 0)) dump_now = false;
+    if (dump_now) {
         // the next output dump cadence is overridden such that only the last dump before switching -> is this possible by doing this?
         auto tm_copy = tm;
         auto pouts = std::make_unique<Outputs>(pmesh, pin, &tm_copy);
