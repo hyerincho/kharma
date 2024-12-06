@@ -175,6 +175,7 @@ void B_CT::AverageBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const
                             }
                         , sum_reducer);
                     }
+                    member.team_barrier();
 
                     // Calculate the average
                     const double emf_av = emf_sum / len;
