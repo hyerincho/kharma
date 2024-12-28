@@ -176,7 +176,6 @@ void Multizone::DecideActiveBlocksAndBoundaryConditions(Mesh *pmesh, const SimTi
 
     Real active_x1min = m::log(active_rin);
     Real active_x1max = m::log(active_rout);
-    if (verbose) std::cout << "i_within_vcycle" << i_within_vcycle << " i_zone " << i_zone << " i_vcycle " << i_vcycle << " active_rout " << active_rout << " active_rin " << active_rin << std::endl;
 
     const int num_blocks = pmesh->block_list.size();
     
