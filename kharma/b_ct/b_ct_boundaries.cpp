@@ -38,6 +38,8 @@
 #include "grmhd.hpp"
 #include "grmhd_functions.hpp"
 #include "kharma.hpp"
+#include "floors.hpp"
+#include "inverter.hpp"
 
 void B_CT::ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse)
 {
@@ -306,6 +308,13 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real> *rc, IndexDomain domain, cons
     // TODO standardize on passing Packs or Datas...
     auto B_U = rc->PackVariables(std::vector<std::string>{"cons.B"});
     auto B_P = rc->PackVariables(std::vector<std::string>{"prims.B"});
+    // Pull variables (TODO take packs & maps, see boundaries.cpp)
+    PackIndexMap prims_map, cons_map;
+    auto P = rc->PackVariables({Metadata::GetUserFlag("Primitive"), Metadata::Cell}, prims_map);
+    auto U = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell}, cons_map);
+    const VarMap m_u(cons_map, true), m_p(prims_map, false);
+    const Floors::Prescription floors = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
+    const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
 
     const auto& G = pmb->coords;
 
@@ -342,6 +351,10 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real> *rc, IndexDomain domain, cons
                     B_P(V3, k, jf, i) =  (fpack(F3, 0, k, jf, i) / G.gdet(Loci::face3, jf, i)
                                         + fpack(F3, 0, k + 1, jf, i) / G.gdet(Loci::face3, jf, i)) / 2;
                     B_U(V3, k, jf, i) = B_P(V3, k, jf, i) * G.gdet(Loci::center, jf, i);
+                    
+                    // Recover primitive GRMHD variables from our modified U
+                    Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, jf, i, P, m_p, Loci::center,
+                                                              floors, 8, 1e-8);
                 }
             );
         }
