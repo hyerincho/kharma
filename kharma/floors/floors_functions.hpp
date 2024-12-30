@@ -116,21 +116,23 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             //del_rho = (FE_old - FE_new - (betagamma2_max * rho_temp / (gam - 1.) - gam * u_temp) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]) / 
             //            (Dtmp_new.ucon[1] + (1. + betagamma2_max / (gam - 1.)) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]);
             if (del_rho < 0) {
-                printf("HYERIN: r=%.3g f=%.5g frac_rho=%.5g betagamma2=%.3g betagamma2_max=%.3g before: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g, after: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g\n", G.r(k, j, i), f, del_rho / rho_temp, betagamma2, betagamma2_max,
-                        Dtmp_old.ucov[0], Dtmp_old.ucon[1], P(m_p.U1, k, j, i) / f, gamma * u_temp * Dtmp_old.ucon[1] * Dtmp_old.ucov[0],
-                        dot(Dtmp_old.bcon, Dtmp_old.bcov) * Dtmp_old.ucon[1] * Dtmp_old.ucov[0], -Dtmp_old.bcon[1] * Dtmp_old.bcov[0],
-                        Dtmp_new.ucov[0], Dtmp_new.ucon[1], P(m_p.U1, k, j, i), m::sqrt(1. + betagamma2_max) * u_temp * Dtmp_new.ucon[1] * Dtmp_new.ucov[0],
-                        dot(Dtmp_new.bcon, Dtmp_new.bcov) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0], -Dtmp_new.bcon[1] * Dtmp_new.bcov[0]);
+                printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
+                //printf("HYERIN: r=%.3g f=%.5g frac_rho=%.5g betagamma2=%.3g betagamma2_max=%.3g before: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g, after: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g\n", G.r(k, j, i), f, del_rho / rho_temp, betagamma2, betagamma2_max,
+                //        Dtmp_old.ucov[0], Dtmp_old.ucon[1], P(m_p.U1, k, j, i) / f, gamma * u_temp * Dtmp_old.ucon[1] * Dtmp_old.ucov[0],
+                //        dot(Dtmp_old.bcon, Dtmp_old.bcov) * Dtmp_old.ucon[1] * Dtmp_old.ucov[0], -Dtmp_old.bcon[1] * Dtmp_old.bcov[0],
+                //        Dtmp_new.ucov[0], Dtmp_new.ucon[1], P(m_p.U1, k, j, i), m::sqrt(1. + betagamma2_max) * u_temp * Dtmp_new.ucon[1] * Dtmp_new.ucov[0],
+                //        dot(Dtmp_new.bcon, Dtmp_new.bcov) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0], -Dtmp_new.bcon[1] * Dtmp_new.bcov[0]);
             }
             del_rho = m::max(del_rho, 0.);
             //frac_rho = del_rho / rho_temp;
-            //if (frac_rho > 0.1) {
+            if (del_rho > rho_temp) {
+                printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
+                del_rho = rho_temp;
             //    if (frac_rho > 0.1) printf("HYERIN: fractional density too high of %.3g \n", frac_rho);
             //    frac_rho = 0.; //then don't adjust rho, u
-            //}
+            }
             //del_rho = m::min(frac_rho, 0.01) * rho_temp; // (12/05/23) trying this out to prevent from crashing, not using this for now.
             //del_rho = frac_rho * rho_temp; // (12/14/23)
-            if (del_rho < 0) printf("HYERIN: del_rho still negative!\n");
             P(m_p.RHO, k, j, i) += del_rho;
             // old prescription
             //P(m_p.UU, k, j, i) += del_rho * betagamma2_max / (gam * (gam - 1.)); //don't add u
