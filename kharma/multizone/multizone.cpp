@@ -219,6 +219,7 @@ void Multizone::GetActiveZoneBoundary(Mesh *pmesh)
     const Real x1min = G.GetXmin()[0];
     params.Update<int>("active_iin", (int) ((active_x1min - x1min) / dx1));
     params.Update<int>("active_iout", (int) ((active_x1max - x1min) / dx1));
+    EndFlag();
 }
 
 //TaskStatus Multizone::DecideToSwitch(MeshData<Real> *md, const SimTime &tm, bool &switch_zone)
