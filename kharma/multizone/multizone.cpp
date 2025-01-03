@@ -257,7 +257,6 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm, bool verbose)
     int n0_zone = params.Get<int>("n0_zone"); // cycle at zone-switching
     int i_zone = m::abs(i_within_vcycle - (nzones_eff - 1)); // zone number. zone-0 is the smallest annulus.
     auto dt_last_zone = params.Get<std::vector<Real>>("dt_last_zone");
-    if (verbose) std::cout << "i_within_vcycle" << i_within_vcycle << " i_zone " << i_zone << " i_vcycle " << i_vcycle << " dt_last_zone " << dt_last_zone[i_zone] << std::endl;
     
     // If determined to switch zones, update teh zones accordingly
     bool switch_zone = params.Get<bool>("switch_zone");
