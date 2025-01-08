@@ -41,7 +41,7 @@
 #include "floors.hpp"
 #include "inverter.hpp"
 
-void B_CT::ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse)
+void B_CT::ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse, bool extended_dirichlet)
 {
     auto pmb = rc->GetBlockPointer();
     const BoundaryFace bface = KBoundaries::BoundaryFaceOf(domain);
@@ -49,9 +49,20 @@ void B_CT::ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const Va
     const int bdir = KBoundaries::BoundaryDirection(bface);
     const bool binner = KBoundaries::BoundaryIsInner(bface);
     // Select edges which lie on the domain face, zero only those
+    int active_i_bdr;
+    if (extended_dirichlet) {
+        auto &params = pmb->packages.Get("Multizone")->AllParams();
+        int active_iin = params.Get<int>("active_iin");
+        int active_iout = params.Get<int>("active_iout");
+        active_i_bdr = (binner) ? active_iin: active_iout;
+        const int ng = Globals::nghost;
+        const int n1 = pmb->cellbounds.ncellsi(IndexDomain::entire);
+        if (active_i_bdr <= ng || active_i_bdr >= n1 - ng) return; // Don't apply at innermost and outermost boundaries
+    }
     for (auto &el : OrthogonalEdges(bdir)) {
         auto b = KDomain::GetBoundaryRange(rc, domain, el, coarse);
         int i_face = (binner) ? b.ie : b.is;
+        if (extended_dirichlet) i_face = active_i_bdr;
         int j_face = (binner) ? b.je : b.js;
         int k_face = (binner) ? b.ke : b.ks;
         IndexRange ib = (bdir == 1) ? IndexRange{i_face, i_face} : IndexRange{b.is, b.ie};

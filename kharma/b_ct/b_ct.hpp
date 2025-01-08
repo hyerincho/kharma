@@ -134,7 +134,7 @@ void CalcDivB(MeshData<Real> *md, std::string divb_field_name="divB");
  * 
  * *mostly. I think
  */
-void ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse);
+void ZeroBoundaryEMF(MeshBlockData<Real> *rc, IndexDomain domain, const VariablePack<Real> &emfpack, bool coarse, bool extended_dirichlet=false);
 
 /**
  * Average all EMFs corresponding to the coordinate pole location, e.g. usually all E1 on X2 faces

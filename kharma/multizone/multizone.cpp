@@ -349,7 +349,11 @@ TaskStatus Multizone::AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only)
                     B_CT::AverageBoundaryEMF(rc.get(),
                                             KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
                                             emfpack, false, true);
-                } // TODO: only supporting bfluxc for now
+                } else {
+                    B_CT::ZeroBoundaryEMF(rc.get(),
+                                            KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
+                                            emfpack, false, true);
+                }
             }
         }
     }
