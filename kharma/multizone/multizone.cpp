@@ -337,17 +337,20 @@ TaskStatus Multizone::AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only)
     auto &params = md_emf_only->GetMeshPointer()->packages.Get("Multizone")->AllParams();
     const bool bflux_const = params.Get<bool>("bflux_const");
 
-    for (int i=0; i < BOUNDARY_NFACES; i++) {
-        BoundaryFace bface = (BoundaryFace) i;
-        if (KBoundaries::BoundaryDirection(bface) == X1DIR) {
-            auto& rc = md_emf_only->GetBlockData(0); // Only one block
-            // This is the only thing in the MeshData we're passed anyway...
-            auto& emfpack = rc->PackVariables(std::vector<std::string>{"B_CT.emf"});
-            if (bflux_const) {
-                B_CT::AverageBoundaryEMF(rc.get(),
-                                        KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
-                                        emfpack, false, true);
-            } // TODO: only supporting bfluxc for now
+    for (int b=0; b < md_emf_only->NumBlocks(); ++b) {
+        auto& rc = md_emf_only->GetBlockData(b);
+        auto pmb = rc->GetBlockPointer();
+        for (int i=0; i < BOUNDARY_NFACES; i++) {
+            BoundaryFace bface = (BoundaryFace) i;
+            if (KBoundaries::BoundaryDirection(bface) == X1DIR && pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                // This is the only thing in the MeshData we're passed anyway...
+                auto& emfpack = rc->PackVariables(std::vector<std::string>{"B_CT.emf"});
+                if (bflux_const) {
+                    B_CT::AverageBoundaryEMF(rc.get(),
+                                            KBoundaries::BoundaryDomain(static_cast<BoundaryFace>(i)),
+                                            emfpack, false, true);
+                } // TODO: only supporting bfluxc for now
+            }
         }
     }
 

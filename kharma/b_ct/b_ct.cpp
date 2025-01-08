@@ -508,9 +508,11 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
     int j_f, offset, point_out, jps, jp_now;
     int ng = Globals::nghost;
     GRCoordinates G;
-    for (auto &pmb : pmesh->block_list) {
+
+    for (int iblock=0; iblock < md->NumBlocks(); iblock++) {
+        auto& rc = md->GetBlockData(iblock); // this retrieves at current stage
+        auto pmb = rc->GetBlockPointer();
         G = pmb->coords;
-        auto& rc = pmb->meshblock_data.Get();
         auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
         auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr.fB_avg"});
         auto rho_U = rc->PackVariables(std::vector<std::string>{"cons.rho"});
