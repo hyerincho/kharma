@@ -75,6 +75,7 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         Update::EstimateTimestep<MeshData<Real>>(base.get());
         // TODO: here figure out a way to calculate timesteps only for the active regions
         SetGlobalTimeStep();
+        integrator->dt = tm.dt; // overwrite
         std::cout << "HYERIN: actual dt is " << tm.dt << std::endl;
     }
     // Which packages we load affects which tasks we'll add to the list

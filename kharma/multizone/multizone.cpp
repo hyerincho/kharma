@@ -217,8 +217,8 @@ void Multizone::GetActiveZoneBoundary(Mesh *pmesh)
     const auto &G = pmesh->block_list[0]->coords;
     const Real dx1 = G.Dxc<1>(0);
     const Real x1min = G.GetXmin()[0];
-    params.Update<int>("active_iin", (int) ((active_x1min - x1min) / dx1));
-    params.Update<int>("active_iout", (int) ((active_x1max - x1min) / dx1));
+    params.Update<int>("active_iin", std::round((active_x1min - x1min) / dx1));
+    params.Update<int>("active_iout", std::round((active_x1max - x1min) / dx1));
     EndFlag();
 }
 
