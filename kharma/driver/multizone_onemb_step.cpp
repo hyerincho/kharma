@@ -223,12 +223,22 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         // since they must be applied to the primitive variables rho,u,u1,u2,u3
         // but should apply to conserved forms of everything else.
 
+        // (01/21/25) Hyerin: We shouldn't perform inversion on wrong fine cell conserved values.
+        auto t_ismr_done = t_none;
+        if (pkgs.count("ISMR")) {
+            if (pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
+                t_ismr_done = tl.AddTask(t_none, B_CT::DerefinePoles, md_sub_step_final.get());
+            } else {
+                printf("WARNING: internal SMR near the poles is requested, but the number of levels should be >= 1. Not operating internal SMR.\n");
+            }
+        }
+
         // This call fills the fluid primitive values in all physical zones, that is, including MPI boundaries but
         // not the physical boundaries (which haven't been filled yet!)
         // This relies on the primitives being calculated identically in MPI boundaries, vs their corresponding
         // physical zones in the adjacent mesh block.  To ensure this, we seed the solver with the same values
         // in each case, by synchronizing them along with the conserved values above.
-        auto t_utop = tl.AddTask(t_none, Packages::MeshUtoP, md_sub_step_final.get(), IndexDomain::entire, false);
+        auto t_utop = tl.AddTask(t_ismr_done, Packages::MeshUtoP, md_sub_step_final.get(), IndexDomain::entire, false);
         // As soon as we have primitive variables, apply floors
         auto t_floors = tl.AddTask(t_utop, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
 
@@ -274,23 +284,23 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
         // Make sure *all* conserved vars are synchronized at step end
         //auto t_ptou = tl.AddTask(t_heat_electrons, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
 
-        auto t_ismr_done = t_overwrite;
-        if (pkgs.count("ISMR")) {
-            if (pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
-                auto t_ptou = tl.AddTask(t_overwrite, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
-                auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
-                auto t_floors_2 = tl.AddTask(t_derefine_poles, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
-                t_ismr_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
-            } else {
-                printf("WARNING: internal SMR near the poles is requested, but the number of levels should be >= 1. Not operating internal SMR.\n");
-            }
-        }
+        //auto t_ismr_done = t_overwrite;
+        //if (pkgs.count("ISMR")) {
+        //    if (pkgs.at("ISMR")->Param<uint>("nlevels") > 0) {
+        //        auto t_ptou = tl.AddTask(t_overwrite, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
+        //        auto t_derefine_poles = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
+        //        auto t_floors_2 = tl.AddTask(t_derefine_poles, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::entire);
+        //        t_ismr_done = tl.AddTask(t_floors_2, Inverter::MeshFixUtoP, md_sub_step_final.get());
+        //    } else {
+        //        printf("WARNING: internal SMR near the poles is requested, but the number of levels should be >= 1. Not operating internal SMR.\n");
+        //    }
+        //}
         
         // TODO HYERIN (11/20/24) need overwriting here again?
         // HYERIN (11/20/24) Overwrite
         //auto t_dirichlet = tl.AddTask(t_ismr_done, Multizone::ExtendedDirichlet, md_preserve.get(), md_sub_step_final.get(), use_b_ct);
         
-        auto t_set_bc = tl.AddTask(t_ismr_done, parthenon::ApplyBoundaryConditionsOnCoarseOrFineMD, md_sync, false);
+        auto t_set_bc = tl.AddTask(t_overwrite, parthenon::ApplyBoundaryConditionsOnCoarseOrFineMD, md_sync, false);
         
         // TODO HYERIN (11/20/24) do I need this PtoU again?
         // Make sure *all* conserved vars are synchronized at step end

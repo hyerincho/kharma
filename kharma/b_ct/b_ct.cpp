@@ -757,21 +757,24 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                 VarMap m_u(cons_map_utop, true), m_p(prims_map, false);
                 const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
                 const Floors::Prescription floors = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
-                pmb->par_for("DerefinePoles_UtoP", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
-                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-                        const int j_c = j + ((binner) ? 0 : -1); // cell center
-                        // The usual inverter is not EMHD-aware, so it's going to dump all of T into the
-                        // ideal GRMHD fluid variables
-                        Inverter::u_to_p<Inverter::Type::onedw>(G, vars_utop, m_u, gam, k, j_c, i, P, m_p, Loci::center,
-                                            floors, 8, 1e-8);
-                        // Consistent with that, we zero out the EMHD extra variables.  This switches theories to
-                        // evolving ideal GRMHD in ISMR region, but conserves the components of T themselves
-                        if (m_u.Q >= 0) vars_utop(m_u.Q, k, j_c, i) = 0.;
-                        if (m_p.Q >= 0) P(m_p.Q, k, j_c, i) = 0.;
-                        if (m_u.DP >= 0) vars_utop(m_u.DP, k, j_c, i) = 0.;
-                        if (m_p.DP >= 0) P(m_p.DP, k, j_c, i) = 0.;
-                    }
-                );
+                //pmb->par_for("DerefinePoles_UtoP", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                //    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                //        const int j_c = j + ((binner) ? 0 : -1); // cell center
+                //        // The usual inverter is not EMHD-aware, so it's going to dump all of T into the
+                //        // ideal GRMHD fluid variables
+                //        Inverter::u_to_p<Inverter::Type::onedw>(G, vars_utop, m_u, gam, k, j_c, i, P, m_p, Loci::center,
+                //                            floors, 8, 1e-8);
+    
+                //        if (i >= 150 && i <= 160 && j >= 4 && j < 8 && k==36 && P(m_p.U1, k, j, i) < 0)
+                //            printf("HYERIN: after ismr (i,j,k) = (%d %d %d) U1 %.5g \n", i, j, k, P(m_p.U1, k, j, i));
+                //        // Consistent with that, we zero out the EMHD extra variables.  This switches theories to
+                //        // evolving ideal GRMHD in ISMR region, but conserves the components of T themselves
+                //        if (m_u.Q >= 0) vars_utop(m_u.Q, k, j_c, i) = 0.;
+                //        if (m_p.Q >= 0) P(m_p.Q, k, j_c, i) = 0.;
+                //        if (m_u.DP >= 0) vars_utop(m_u.DP, k, j_c, i) = 0.;
+                //        if (m_p.DP >= 0) P(m_p.DP, k, j_c, i) = 0.;
+                //    }
+                //);
             }
         }
     }

@@ -48,6 +48,7 @@
 #include "grmhd.hpp"
 #include "kharma.hpp"
 #include "kharma_driver.hpp"
+#include "multizone.hpp"
 #include "reductions.hpp"
 #include "seed_B.hpp"
 #include "types.hpp"
@@ -108,6 +109,10 @@ void KHARMA::PostInitialize(ParameterInput *pin, Mesh *pmesh, bool is_restart)
         // Parthenon restores all parameters (global vars) when restarting,
         // but KHARMA needs a few (currently one) reset instead
         KHARMA::ResetGlobals(pin, pmesh);
+
+        if (pkgs.count("Multizone")) {
+            Multizone::ReadMultizoneRestart(pin, pmesh);
+        }
 
         // We only record the conserved magnetic field in KHARMA restarts,
         // but we record primitive field in iharm3d restarts

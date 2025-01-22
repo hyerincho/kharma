@@ -75,6 +75,14 @@ TaskStatus Inverter::FixUtoP(MeshBlockData<Real> *rc)
     const IndexRange3 b = KDomain::GetPhysicalRange(rc);
 
     const auto& G = pmb->coords;
+    
+    const bool multizone_onemb = (pmb->packages.Get("Driver")->Param<DriverType>("type") == DriverType::multizone_onemb);
+    int active_iin = b.is;
+    int active_iout = b.ie;
+    if (multizone_onemb) {
+        active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
+        active_iout = pmb->packages.Get("Multizone")->Param<int>("active_iout");
+    }
 
     pmb->par_for("fix_U_to_P", b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
@@ -89,7 +97,7 @@ TaskStatus Inverter::FixUtoP(MeshBlockData<Real> *rc)
                             for (int l = -1; l <= 1; l++) {
                                 int ii = i + l, jj = j + m, kk = k + n;
                                 // If we haven't overstepped array bounds...
-                                if (KDomain::inside(kk, jj, ii, b)) {
+                                if (KDomain::inside(kk, jj, ii, b) && ii >= active_iin && ii <= active_iout) {
                                     // Count only the good cells (not failed AND not corner), if we can
                                     // Note interpolated "fixed" cells stay flagged
                                     if (!failed(pflag(kk, jj, ii))) {

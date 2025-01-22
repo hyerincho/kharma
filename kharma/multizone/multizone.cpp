@@ -73,11 +73,16 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     
     
     // mutable parameters - V cycle information
-    params.Add("i_within_vcycle", 0, true);
-    params.Add("i_vcycle", 0, true);
-    params.Add("t0_zone", 0.0, true);
-    params.Add("n0_zone", 0, true);
-    params.Add("switch_zone", false, true);
+    if(! params.hasKey("i_within_vcycle"))
+        params.Add("i_within_vcycle", 0, true);
+    if(! params.hasKey("i_vcycle"))
+        params.Add("i_vcycle", 0, true);
+    if(! params.hasKey("t0_zone"))
+        params.Add("t0_zone", 0.0, true);
+    if(! params.hasKey("n0_zone"))
+        params.Add("n0_zone", 0, true);
+    if(! params.hasKey("switch_zone"))
+        params.Add("switch_zone", false, true);
 
     // options when using the characteristic time to determine zone-switching
     const Real rs = pin->GetOrAddReal("bondi", "rs", 16.);
@@ -108,12 +113,17 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     // also save active rin and rout as mutable parameters
     const int active_rin_init = m::pow(base, nzones_eff + offset - 1);
     const int active_rout_init = m::pow(base, nzones + 1);
-    params.Add("active_rin", active_rin_init, true);
-    params.Add("active_rout", active_rout_init, true);
-    params.Add("active_iin", -1, true);
-    params.Add("active_iout", -1, true);
+    if(! params.hasKey("active_rin"))
+        params.Add("active_rin", active_rin_init, true);
+    if(! params.hasKey("active_rout"))
+        params.Add("active_rout", active_rout_init, true);
+    if(! params.hasKey("active_iin"))
+        params.Add("active_iin", -1, true);
+    if(! params.hasKey("active_iout"))
+        params.Add("active_iout", -1, true);
     std::vector<Real> dt_init(nzones_eff, pin->GetReal("parthenon/time", "dt_min"));
-    params.Add("dt_last_zone", dt_init, true);
+    if(! params.hasKey("dt_last_zone"))
+        params.Add("dt_last_zone", dt_init, true);
 
     //pkg->BlockUtoP = Electrons::BlockUtoP;
     //pkg->BoundaryUtoP = Electrons::BlockUtoP;
@@ -479,4 +489,38 @@ void Multizone::ExtendedDirichletFace(MeshData<Real> *source, MeshData<Real> *de
             }
         );
     }
+}
+
+//void ReadMultizoneRestart(std::string fname, ParameterInput *pin)
+void Multizone::ReadMultizoneRestart(ParameterInput *pin, Mesh *pmesh)
+{
+    // Read input from restart file 
+    // (from external/parthenon/src/parthenon_manager.cpp)
+    auto fname = pin->GetString("resize_restart", "fname"); // Require this, don't guess
+    auto restartReader = std::make_unique<RestartReader>(fname.c_str());
+
+    int i_within_vcycle = restartReader->GetAttr<int>("Params", "Multizone/i_within_vcycle");
+    int i_vcycle = restartReader->GetAttr<int>("Params", "Multizone/i_vcycle");
+    Real t0_zone = restartReader->GetAttr<Real>("Params", "Multizone/t0_zone");
+    int n0_zone = restartReader->GetAttr<int>("Params", "Multizone/n0_zone");
+    //int switch_zone = restartReader->GetAttr<int>("Params", "Multizone/switch_zone");
+    //auto active_rin = restartReader->GetAttr<int>("Params", "Multizone/active_rin");
+    //auto active_rout = restartReader->GetAttr<int>("Params", "Multizone/active_rout");
+    //auto active_iin = restartReader->GetAttr<int>("Params", "Multizone/active_iin");
+    //auto active_iout = restartReader->GetAttr<int>("Params", "Multizone/active_iout");
+    //auto dt_last_zone = restartReader->GetAttr<std::vector<Real>>("Params", "Multizone/dt_last_zone");
+        
+    auto &params = pmesh->packages.Get("Multizone")->AllParams();
+    params.Update<int>("i_within_vcycle", i_within_vcycle);
+    params.Update<int>("i_vcycle", i_vcycle);
+    params.Update<Real>("t0_zone", t0_zone);
+    params.Update<int>("n0_zone", n0_zone);
+    //params.Update<bool>("switch_zone", true); // temporary
+    //params.Update<int>("active_rin", active_rin);
+    //params.Update<int>("active_rout", active_rout);
+    //params.Update<int>("active_iin", active_iin);
+    //params.Update<int>("active_iout", active_iout);
+    //params.Update<std::vector<Real>>("dt_last_zone", dt_last_zone);
+
+    // file closed here when restartreader falls out of scope
 }

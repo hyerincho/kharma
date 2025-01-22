@@ -132,4 +132,6 @@ void ExtendedDirichletFace(MeshData<Real> *source, MeshData<Real> *dest, const i
 void GetActiveZoneBoundary(Mesh *pmesh);
 TaskStatus AverageEMFSeamsOnemb(MeshData<Real> *md_emf_only);
 
+void ReadMultizoneRestart(ParameterInput *pin, Mesh *pmesh);
+
 } // Multizone
