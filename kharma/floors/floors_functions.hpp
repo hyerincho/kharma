@@ -72,18 +72,18 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
         EMHD::EMHD_parameters emhd_params = {0}; // temporary, we are not using emhd yet
         FourVectors Dtmp_old, Dtmp_new;
         GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_old);
-        if (betagamma2 > betagamma2_max && Dtmp_old.ucon[1] > 0) {
-            // only apply for outflowing gas cells
-            Real mhd_old[GR_DIM], mhd_new[GR_DIM];
-            Real FE_old, FE_new; // T^r_t + rho * u^r values
-            Real del_rho; // extra density to add
-            Real frac_rho; // fractional density to add
-            Real rho_temp = P(m_p.RHO, k, j, i);
-            Real u_temp = P(m_p.UU, k, j, i);
+        Real mhd_old[GR_DIM], mhd_new[GR_DIM];
+        Real FE_old, FE_new; // T^r_t + rho * u^r values
+        Real del_rho; // extra density to add
+        Real frac_rho; // fractional density to add
+        Real rho_temp = P(m_p.RHO, k, j, i);
+        Real u_temp = P(m_p.UU, k, j, i);
 
-            // (T^r_t + rho * u^r) old
-            Flux::calc_tensor(P, m_p, Dtmp_old, emhd_params, gam, k, j, i, X1DIR, mhd_old);
-            FE_old = mhd_old[0] + rho_temp * Dtmp_old.ucon[1];
+        // (T^r_t + rho * u^r) old
+        Flux::calc_tensor(P, m_p, Dtmp_old, emhd_params, gam, k, j, i, X1DIR, mhd_old);
+        FE_old = mhd_old[0] + rho_temp * Dtmp_old.ucon[1];
+        if (betagamma2 > betagamma2_max && Dtmp_old.ucon[1] > 0 && FE_old < 0) {
+            // only apply for outflowing gas cells
 
             // reduce velocities
             Real f = m::sqrt(betagamma2_max / betagamma2);
@@ -110,8 +110,8 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             
             // determine how much rho to add
             // old prescription, doesn't control final resulting sound speed below beta*gamma max
-            del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]);
-                                            //+ betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.)); // don't add u
+            del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]
+                                            + betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.)); // don't add u
             //  new prescription (12/13/23): always set the final sound speed equal to beta*gamma_max
             //del_rho = (FE_old - FE_new - (betagamma2_max * rho_temp / (gam - 1.) - gam * u_temp) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]) / 
             //            (Dtmp_new.ucon[1] + (1. + betagamma2_max / (gam - 1.)) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]);
@@ -135,7 +135,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             //del_rho = frac_rho * rho_temp; // (12/14/23)
             P(m_p.RHO, k, j, i) += del_rho;
             // old prescription
-            //P(m_p.UU, k, j, i) += del_rho * betagamma2_max / (gam * (gam - 1.)); //don't add u
+            P(m_p.UU, k, j, i) += del_rho * betagamma2_max / (gam * (gam - 1.)); //don't add u
             // new prescription (12/13/23)
             //if (frac_rho > 0) P(m_p.UU, k, j, i) = betagamma2_max * P(m_p.RHO, k, j, i) / (gam * (gam - 1.));
 
