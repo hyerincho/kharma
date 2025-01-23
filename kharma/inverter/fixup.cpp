@@ -78,7 +78,7 @@ TaskStatus Inverter::FixUtoP(MeshBlockData<Real> *rc)
     
     const bool multizone_onemb = (pmb->packages.Get("Driver")->Param<DriverType>("type") == DriverType::multizone_onemb);
     int active_iin = b.is;
-    int active_iout = b.ie;
+    int active_iout = b.ie + 1;
     if (multizone_onemb) {
         active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
         active_iout = pmb->packages.Get("Multizone")->Param<int>("active_iout");
@@ -97,7 +97,7 @@ TaskStatus Inverter::FixUtoP(MeshBlockData<Real> *rc)
                             for (int l = -1; l <= 1; l++) {
                                 int ii = i + l, jj = j + m, kk = k + n;
                                 // If we haven't overstepped array bounds...
-                                if (KDomain::inside(kk, jj, ii, b) && ii >= active_iin && ii <= active_iout) {
+                                if (KDomain::inside(kk, jj, ii, b) && ii >= active_iin && ii < active_iout) {
                                     // Count only the good cells (not failed AND not corner), if we can
                                     // Note interpolated "fixed" cells stay flagged
                                     if (!failed(pflag(kk, jj, ii))) {
@@ -158,6 +158,58 @@ TaskStatus Inverter::FixUtoP(MeshBlockData<Real> *rc)
             }
         }
     );
+    
+    auto& pkgs = pmb->packages.AllPackages();
+    if (pkgs.count("ISMR")) {
+        // TODO: make this as a separate function
+        // make sure that coarse cells have same exact conserved variables
+        PackIndexMap cons_map_fl;
+        auto vars_fl = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell, Metadata::Independent}, cons_map_fl);
+        auto vars_avg = rc->PackVariables(std::vector<std::string>{"ismr.vars_avg"});
+        const int nvar_fl = vars_fl.GetDim(4);
+	    const uint nlevels = pmb->packages.Get("ISMR")->Param<uint>("nlevels");
+        int ng = Globals::nghost;
+        for (int i = 0; i < BOUNDARY_NFACES; i++) {
+            BoundaryFace bface = (BoundaryFace) i;
+            auto bdir = KBoundaries::BoundaryDirection(bface);
+            auto domain = KBoundaries::BoundaryDomain(bface);
+            auto binner = KBoundaries::BoundaryIsInner(bface);
+            if (bdir == X2DIR && pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                IndexRange3 bF2 = KDomain::GetRange(rc, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false);
+                int j_f = (binner) ? bF2.je : bF2.js; // last physical face
+                int jps = (binner) ? j_f + (nlevels - 1) : j_f - (nlevels - 1); // start of the lowest level of derefinement
+                const IndexRange j_p = IndexRange{(binner) ? j_f : jps, (binner) ? jps : j_f};  // Range of x2 to be de-refined
+                IndexRange3 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
+                // fluid variables average 
+                pmb->par_for("DerefinePoles_avg_fluid", 0, nvar_fl-1, bCC.ks, bCC.ke, j_p.s, j_p.e, active_iin, active_iout - 1,
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                        const int coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                        // cell center
+                        const int j_c = j + ((binner) ? 0 : -1);
+                        // this fine cell's k-index within the coarse cell
+                        const int k_fine = (k - ng) % coarse_cell_len;
+                        // starting k-index of the coarse cell
+                        const int k_start = k - k_fine;
+
+                        // average each var over next `coarse_cell_len` cells
+                        // Lots of repeated ops but we don't care, this is applied over a small region
+                        Real avg = 0.;
+                        for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                            avg += vars_fl(v, k_start + ktemp, j_c, i);
+                        avg /= coarse_cell_len;
+                        vars_avg(v, k, j_c, i) = avg;
+                    }
+                );
+                // fluid variables write
+                pmb->par_for("DerefinePoles_write_fluid", 0, nvar_fl-1, bCC.ks, bCC.ke, j_p.s, j_p.e, active_iin, active_iout - 1,
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                        const int j_c = j + ((binner) ? 0 : -1); // cell center
+                        vars_fl(v, k, j_c, i) = vars_avg(v, k, j_c, i);
+                    }
+                );
+            }
+        }
+    }
 
     EndFlag();
     return TaskStatus::complete;
