@@ -133,7 +133,6 @@ class CoordinateEmbedding {
                 GReal a = pin->GetReal("coordinates", "a");
                 bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
                 if (ext_g || base_str == "spherical_ks_extg" || base_str == "ks_extg") {
-                    if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
                     base.emplace<SphKSExtG>(SphKSExtG(a));
                 } else {
                     base.emplace<SphKSCoords>(SphKSCoords(a));
@@ -143,7 +142,6 @@ class CoordinateEmbedding {
                 GReal a = pin->GetReal("coordinates", "a");
                 bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
                 if (ext_g || base_str == "spherical_bl_extg" || base_str == "bl_extg") {
-                    if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
                     base.emplace<SphBLExtG>(SphBLExtG(a));
                 } else {
                     base.emplace<SphBLCoords>(SphBLCoords(a));

@@ -205,25 +205,30 @@ class SphKSExtG {
 
             const GReal Phi_g = (A / (B - 1.)) * (m::pow(r, B-1.) - m::pow(2, B-1.));
 
-            gcov[0][0] = -1. + 2.*r/rho2 - 2. * Phi_g;
-            gcov[0][1] = 2.*r/rho2 - 2. * Phi_g;
-            gcov[0][2] = 0.;
-            gcov[0][3] = -2.*a*r*sin2/rho2;
+            const GReal F = (1. / r - Phi_g) * r * r;
+            const GReal Delta = (1 - 2. / r + 2. * Phi_g) * r * r + a * a;
+            const GReal Sigma = rho2;
+            const GReal Pi = m::pow(r * r + a * a, 2.) - Delta * a * a * sin2;
 
-            gcov[1][0] = 2.*r/rho2 - 2. * Phi_g;
-            gcov[1][1] = 1. + 2.*r/rho2 - 2. * Phi_g;
+            gcov[0][0] = -1. + 2. * F / Sigma; //-1. + 2.*r/rho2 - 2. * Phi_g;
+            gcov[0][1] = 2. * F / Sigma; //2.*r/rho2 - 2. * Phi_g;
+            gcov[0][2] = 0.;
+            gcov[0][3] = -2. * F * a * sin2 / Sigma; //-2.*a*r*sin2/rho2;
+
+            gcov[1][0] = 2. * F / Sigma; //2.*r/rho2 - 2. * Phi_g;
+            gcov[1][1] = 1. + 2. * F / Sigma; //1. + 2.*r/rho2 - 2. * Phi_g;
             gcov[1][2] = 0.;
-            gcov[1][3] = -a*sin2*(1. + 2.*r/rho2);
+            gcov[1][3] = -a * sin2 * (1. + 2. * F / Sigma); //-a*sin2*(1. + 2.*r/rho2);
 
             gcov[2][0] = 0.;
             gcov[2][1] = 0.;
-            gcov[2][2] = rho2;
+            gcov[2][2] = Sigma; //rho2;
             gcov[2][3] = 0.;
 
-            gcov[3][0] = -2.*a*r*sin2/rho2;
-            gcov[3][1] = -a*sin2*(1. + 2.*r/rho2);
+            gcov[3][0] = -2. * F * a * sin2 / Sigma; //-2.*a*r*sin2/rho2;
+            gcov[3][1] = -a * sin2 * (1. + 2. * F / Sigma);//-a*sin2*(1. + 2.*r/rho2);
             gcov[3][2] = 0.;
-            gcov[3][3] = sin2*(rho2 + a*a*sin2*(1. + 2.*r/rho2));
+            gcov[3][3] = Pi * sin2 / Sigma; //sin2*(rho2 + a*a*sin2*(1. + 2.*r/rho2));
         }
 
         // For converting from BL
@@ -236,9 +241,12 @@ class SphKSExtG {
 
             // external gravity from GIZMO
             const GReal Phi_g = (A/(B-1.)) * (m::pow(r,B-1.)-m::pow(2,B-1.));
+            
+            const GReal F = (1. / r - Phi_g) * r * r;
+            const GReal Delta = (1 - 2. / r + 2. * Phi_g) * r * r + a * a;
 
-            trans[0][1] = (2./r - 2.*Phi_g)/(1. - 2./r + 2.*Phi_g);
-            trans[3][1] = a/(r*r - 2.*r + a*a);
+            trans[0][1] = 2. * F / Delta; //(2./r - 2.*Phi_g)/(1. - 2./r + 2.*Phi_g);
+            trans[3][1] = a / Delta;//a/(r*r - 2.*r + a*a);
 
             gzero(vcon);
             DLOOP2 vcon[mu] += trans[mu][nu]*vcon_bl[nu];
@@ -251,9 +259,12 @@ class SphKSExtG {
             DLOOP2 rtrans[mu][nu] = (mu == nu);
 
             const GReal Phi_g = (A / (B-1.)) * (m::pow(r, B-1.) - m::pow(2, B-1.));
+            
+            const GReal F = (1. / r - Phi_g) * r * r;
+            const GReal Delta = (1 - 2. / r + 2. * Phi_g) * r * r + a * a;
 
-            rtrans[0][1] = (2./r - 2.*Phi_g)/(1. - 2./r + 2.*Phi_g);
-            rtrans[3][1] = a/(r*r - 2.*r + a*a);
+            rtrans[0][1] = 2. * F / Delta; //(2./r - 2.*Phi_g)/(1. - 2./r + 2.*Phi_g);
+            rtrans[3][1] = a / Delta;//a/(r*r - 2.*r + a*a);
 
             invert(&rtrans[0][0], &trans[0][0]);
 
@@ -326,14 +337,19 @@ class SphBLExtG {
             const GReal mmu = 1. + a2*cth*cth/r2; // mu is taken as an index
 
             const GReal Phi_g = (A / (B-1.)) * (m::pow(r, B-1.) - m::pow(2, B-1.));
+            
+            const GReal F = (1. / r - Phi_g) * r * r;
+            const GReal Delta = (1 - 2. / r + 2. * Phi_g) * r * r + a * a;
+            const GReal Sigma = r2 + a2*cth*cth;
+            const GReal Pi = m::pow(r * r + a * a, 2.) - Delta * a * a * sin2;
 
             gzero2(gcov);
-            gcov[0][0]  = -(1. - 2./(r*mmu)) - 2. * Phi_g;;
-            gcov[0][3]  = -2.*a*sin2/(r*mmu);
-            gcov[1][1]   = mmu / (1. - 2./r + 2.*Phi_g);
-            gcov[2][2]   = r2*mmu;
-            gcov[3][0]  = -2.*a*sin2/(r*mmu);
-            gcov[3][3]   = sin2*(r2 + a2 + 2.*a2*sin2/(r*mmu));
+            gcov[0][0]  = -(1. - 2. * F / Sigma); //-(1. - 2./(r*mmu)) - 2. * Phi_g;;
+            gcov[0][3]  = -2. * F * a * sin2 / Sigma;//-2.*a*sin2/(r*mmu);
+            gcov[1][1]   = Sigma / Delta; //mmu / (1. - 2./r + 2.*Phi_g);
+            gcov[2][2]   = Sigma; //r2*mmu;
+            gcov[3][0]  = -2. * F * a * sin2 / Sigma;//-2.*a*sin2/(r*mmu);
+            gcov[3][3]   = Pi * sin2 / Sigma; //sin2*(r2 + a2 + 2.*a2*sin2/(r*mmu));
         }
 };
 
