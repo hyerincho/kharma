@@ -64,7 +64,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
     const GReal r_eh = G.coords.get_horizon();
 
     // 1. Limit gamma with respect to normal observer
-    if (floors.radius_dependent_gamma_max && G.r(k, j, i) > 1.5 * r_eh) {
+    if (floors.radius_dependent_gamma_max > 0 && G.r(k, j, i) > 1.5 * r_eh) {
         Real V02 = SQR(myfloors.gamma_max);
         Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, floors.rs_bondi);
         Real betagamma2_max = V02 * vchar2;
@@ -72,16 +72,23 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
         EMHD::EMHD_parameters emhd_params = {0}; // temporary, we are not using emhd yet
         FourVectors Dtmp_old, Dtmp_new;
         GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_old);
-        Real mhd_old[GR_DIM], mhd_new[GR_DIM];
+        Real T1_old[GR_DIM], T1_new[GR_DIM], T0_old[GR_DIM], T0_new[GR_DIM];
         Real FE_old, FE_new; // T^r_t + rho * u^r values
+        Real E_old, E_new; // T^t_t + rho * u^t values
         Real del_rho; // extra density to add
         Real frac_rho; // fractional density to add
+        Real del_u = 0.; // extra internal energy to add
         Real rho_temp = P(m_p.RHO, k, j, i);
         Real u_temp = P(m_p.UU, k, j, i);
 
         // (T^r_t + rho * u^r) old
-        Flux::calc_tensor(P, m_p, Dtmp_old, emhd_params, gam, k, j, i, X1DIR, mhd_old);
-        FE_old = mhd_old[0] + rho_temp * Dtmp_old.ucon[1];
+        Flux::calc_tensor(P, m_p, Dtmp_old, emhd_params, gam, k, j, i, X1DIR, T1_old);
+        FE_old = T1_old[0] + rho_temp * Dtmp_old.ucon[1];
+        
+        // (T^t_t + rho * u^t) old
+        Flux::calc_tensor(P, m_p, Dtmp_old, emhd_params, gam, k, j, i, 0, T0_old);
+        E_old = T0_old[0];// + rho_temp * Dtmp_old.ucon[0];
+
         if (betagamma2 > betagamma2_max && Dtmp_old.ucon[1] > 0 && FE_old < 0) {
             // only apply for outflowing gas cells
 
@@ -105,16 +112,34 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             
             // (T^r_t + rho * u^r) new after changing velocities
             GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, Dtmp_new);
-            Flux::calc_tensor(P, m_p, Dtmp_new, emhd_params, gam, k, j, i, X1DIR, mhd_new);
-            FE_new = mhd_new[0] + rho_temp * Dtmp_new.ucon[1];
+            Flux::calc_tensor(P, m_p, Dtmp_new, emhd_params, gam, k, j, i, X1DIR, T1_new);
+            FE_new = T1_new[0] + rho_temp * Dtmp_new.ucon[1];
+            
+            // (T^t_t + rho * u^t) new after changing velocities
+            Flux::calc_tensor(P, m_p, Dtmp_new, emhd_params, gam, k, j, i, 0, T0_new);
+            E_new = T0_new[0];// + rho_temp * Dtmp_new.ucon[0];
             
             // determine how much rho to add
-            // old prescription, doesn't control final resulting sound speed below beta*gamma max
-            del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]
+            if (floors.radius_dependent_gamma_max == 1) {
+                // prescription # 1: doesn't control final resulting sound speed below beta*gamma max
+                del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]
                                             + betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.)); // don't add u
-            //  new prescription (12/13/23): always set the final sound speed equal to beta*gamma_max
-            //del_rho = (FE_old - FE_new - (betagamma2_max * rho_temp / (gam - 1.) - gam * u_temp) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]) / 
-            //            (Dtmp_new.ucon[1] + (1. + betagamma2_max / (gam - 1.)) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]);
+            } else if (floors.radius_dependent_gamma_max == 2) {
+                // prescription # 2 (12/13/23): always set the final sound speed equal to beta*gamma_max
+                del_rho = (FE_old - FE_new - (betagamma2_max * rho_temp / (gam - 1.) - gam * u_temp) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]) / 
+                            (Dtmp_new.ucon[1] + (1. + betagamma2_max / (gam - 1.)) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]);
+            } else if (floors.radius_dependent_gamma_max == 3) {
+                // prescription # 3: don't add u
+                del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]);
+            } else if (floors.radius_dependent_gamma_max == 4) {
+                // prescription # 4: preserves both FE and E
+                //del_rho = ((gam * Dtmp_new.ucon[0] * Dtmp_new.ucov[0] + gam - 1.) * (FE_old - FE_new) - 
+                //            gam * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] * (E_old - E_new)) / 
+                //    ((gam - 1.) * (1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]);
+                del_rho = ((gam * Dtmp_new.ucon[0] * Dtmp_new.ucov[0] + gam - 1.) * (FE_old - FE_new) - 
+                            gam * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] * (E_old - E_new)) / 
+                    (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
+            }
             if (del_rho < 0) {
                 printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
                 //printf("HYERIN: r=%.3g f=%.5g frac_rho=%.5g betagamma2=%.3g betagamma2_max=%.3g before: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g, after: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g\n", G.r(k, j, i), f, del_rho / rho_temp, betagamma2, betagamma2_max,
@@ -123,21 +148,37 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
                 //        Dtmp_new.ucov[0], Dtmp_new.ucon[1], P(m_p.U1, k, j, i), m::sqrt(1. + betagamma2_max) * u_temp * Dtmp_new.ucon[1] * Dtmp_new.ucov[0],
                 //        dot(Dtmp_new.bcon, Dtmp_new.bcov) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0], -Dtmp_new.bcon[1] * Dtmp_new.bcov[0]);
             }
-            del_rho = m::max(del_rho, 0.);
             //frac_rho = del_rho / rho_temp;
-            if (del_rho > rho_temp) {
-                printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
-                del_rho = rho_temp;
+            //if (del_rho > rho_temp) {
+            //    printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
+            //    del_rho = rho_temp;
             //    if (frac_rho > 0.1) printf("HYERIN: fractional density too high of %.3g \n", frac_rho);
             //    frac_rho = 0.; //then don't adjust rho, u
-            }
+            //}
             //del_rho = m::min(frac_rho, 0.01) * rho_temp; // (12/05/23) trying this out to prevent from crashing, not using this for now.
             //del_rho = frac_rho * rho_temp; // (12/14/23)
+            if (floors.radius_dependent_gamma_max == 1) {
+                // prescription # 1
+                del_u = del_rho * betagamma2_max / (gam * (gam - 1.)); //don't add u
+            } else if (floors.radius_dependent_gamma_max == 2) {
+                // prescription # 2 (12/13/23)
+                del_u = betagamma2_max * (rho_temp + del_rho) / (gam * (gam - 1.)) - u_temp;
+            } else if (floors.radius_dependent_gamma_max == 4) {
+                // prescription # 4 (01/23/25)
+                //del_u = (E_old - E_new) / (gam - 1.) - 
+                //                    (FE_old - FE_new) * Dtmp_new.ucon[0] / ((gam - 1.) * Dtmp_new.ucon[1]);
+                del_u = (Dtmp_new.ucon[1] * (1. + Dtmp_new.ucov[0]) * (E_old - E_new)  - 
+                         Dtmp_new.ucon[0] * Dtmp_new.ucov[0] * (FE_old - FE_new)) /
+                    (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
+            printf("HYERIN: FE_old %.5g FE_new %.5g E_old %.5g E_new %.5g u^0 %.5g -> %.5g u^1 %.5g -> %.5g u_0 %.5g -> %.5g b^0 %.5g -> %.5g b^1 %.5g -> %.5g b_0 %.5g -> %.5g bsq %.5g -> %.5g rho %.5g delrho %.5g u %.5g delu %.5g \n",
+                    FE_old, FE_new, E_old, E_new, Dtmp_old.ucon[0], Dtmp_new.ucon[0], Dtmp_old.ucon[1], Dtmp_new.ucon[1], 
+                    Dtmp_old.ucov[0], Dtmp_new.ucov[0], Dtmp_old.bcon[0], Dtmp_new.bcon[0], Dtmp_old.bcon[1], Dtmp_new.bcon[1],
+                    Dtmp_old.bcov[0], Dtmp_new.bcov[0], dot(Dtmp_old.bcon, Dtmp_old.bcov), dot(Dtmp_new.bcon, Dtmp_new.bcov),
+                    rho_temp, del_rho, u_temp, del_u);
+            }
+            del_rho = m::max(del_rho, 0.);
             P(m_p.RHO, k, j, i) += del_rho;
-            // old prescription
-            P(m_p.UU, k, j, i) += del_rho * betagamma2_max / (gam * (gam - 1.)); //don't add u
-            // new prescription (12/13/23)
-            //if (frac_rho > 0) P(m_p.UU, k, j, i) = betagamma2_max * P(m_p.RHO, k, j, i) / (gam * (gam - 1.));
+            P(m_p.UU, k, j, i) += del_u;
 
             //Real gamma_new = GRMHD::lorentz_calc(G, P, m_p, k, j, i, loc);
         }
@@ -229,7 +270,7 @@ KOKKOS_INLINE_FUNCTION int determine_floors(const GRCoordinates& G, const Variab
     // Then ceilings, need to record these for FOFC. See real implementation for details
     Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
     const GReal r_eh = G.coords.get_horizon();
-    if (myfloors.radius_dependent_gamma_max && G.r(k, j, i) > 1.5 * r_eh) {
+    if (myfloors.radius_dependent_gamma_max > 0 && G.r(k, j, i) > 1.5 * r_eh) {
         Real V02 = SQR(myfloors.gamma_max);
         Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, myfloors.rs_bondi);
         Real betagamma2_max = V02 * vchar2;

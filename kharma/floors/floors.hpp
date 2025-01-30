@@ -116,7 +116,7 @@ class Prescription {
         bool radius_dependent_floors;
         Real floors_switch_r;
         // Radius dependent gamma max with an energy flux preserving feature
-        bool radius_dependent_gamma_max;
+        int radius_dependent_gamma_max;
         Real rs_bondi;
 };
 
@@ -166,7 +166,7 @@ inline Prescription MakePrescription(parthenon::ParameterInput *pin, std::string
 
     p.radius_dependent_floors = pin->GetOrAddBoolean("floors", "radius_dependent_floors", false); 
     p.floors_switch_r = pin->GetOrAddReal("floors", "floors_switch_r", 50.);
-    p.radius_dependent_gamma_max = pin->GetOrAddBoolean("floors", "radius_dependent_gamma_max", false); 
+    p.radius_dependent_gamma_max = pin->GetOrAddInteger("floors", "radius_dependent_gamma_max", 0); 
     p.rs_bondi = pin->GetOrAddReal("bondi", "rs", 16.);
 
     return p;
