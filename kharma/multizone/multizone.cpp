@@ -101,8 +101,9 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     int nzones_eff = nzones;
     int offset = 0; // number of innermost zones to combine
     if (combine_out) {
-        Real r_b = CalcRB(gam, rs);
-        nzones_eff = (int) m::ceil(m::log(r_b) / m::log(base));
+        Real combine_out_radius = pin->GetOrAddReal("multizone", "combine_out_radius", CalcRB(gam, rs)); // radius where the large radii will be combined
+        params.Add("combine_out_radius", combine_out_radius);
+        nzones_eff = (int) m::ceil(m::log(combine_out_radius) / m::log(base));
     } else if (combine_two_largest) nzones_eff -= 1;
     if (base < 8.0) {
         offset = ((int) m::ceil(m::log(8.0) / m::log(base))) - 1;
