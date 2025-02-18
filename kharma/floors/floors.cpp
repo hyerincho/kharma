@@ -151,7 +151,7 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
     // Otherwise stick to specified/default geometric floors
     Floors::Prescription floors_tmp;
     if (pmb->packages.AllPackages().count("Floors")) {
-        floors_tmp = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
+        floors_tmp = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription_inner");
     } else {
         // JUST rho & u geometric
         floors_tmp.rho_min_geom = pin->GetOrAddReal("floors", "rho_min_geom", 1e-6);

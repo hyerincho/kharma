@@ -123,7 +123,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             if (floors.radius_dependent_gamma_max == 1) {
                 // prescription # 1: doesn't control final resulting sound speed below beta*gamma max
                 del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]
-                                            + betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.)); // don't add u
+                                            + betagamma2_max * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] / (gam - 1.));
             } else if (floors.radius_dependent_gamma_max == 2) {
                 // prescription # 2 (12/13/23): always set the final sound speed equal to beta*gamma_max
                 del_rho = (FE_old - FE_new - (betagamma2_max * rho_temp / (gam - 1.) - gam * u_temp) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0]) / 
@@ -159,7 +159,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             //del_rho = frac_rho * rho_temp; // (12/14/23)
             if (floors.radius_dependent_gamma_max == 1) {
                 // prescription # 1
-                del_u = del_rho * betagamma2_max / (gam * (gam - 1.)); //don't add u
+                del_u = del_rho * betagamma2_max / (gam * (gam - 1.));
             } else if (floors.radius_dependent_gamma_max == 2) {
                 // prescription # 2 (12/13/23)
                 del_u = betagamma2_max * (rho_temp + del_rho) / (gam * (gam - 1.)) - u_temp;
