@@ -783,7 +783,7 @@ KOKKOS_INLINE_FUNCTION void ReconstructRowIsmr<Type::weno5_ismr, X2DIR>(partheno
                                         const int& k, const int& j, const int& is_l, const int& ie_l, 
                                         ScratchPad2D<Real> ql, ScratchPad2D<Real> qr, uint ismr_nlevels, int ng)
 {
-    if (j < ng + ismr_nlevels || j > P.GetDim(2) - 1 - ng - ismr_nlevels) {
+    if (j < ng + ismr_nlevels + 1 || j > P.GetDim(2) - 1 - ng - ismr_nlevels) {
         KReconstruction::ReconstructX2l<Type::linear_mc>(member, k, j - 1, is_l, ie_l, P, ql);
         KReconstruction::ReconstructX2r<Type::linear_mc>(member, k, j, is_l, ie_l, P, qr);
     } else
