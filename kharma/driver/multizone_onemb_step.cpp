@@ -126,9 +126,9 @@ TaskCollection KHARMADriver::MakeMultizoneOnembTaskCollection(BlockList_t &block
             auto &tl = preserve_region[i];
             auto &md_full_step_init = pmesh->mesh_data.GetOrAdd("base", i);
             auto &md_preserve = pmesh->mesh_data.GetOrAdd("preserve", i);
-            auto t_copy_cell = tl.AddTask(t_none, Copy<MeshData<Real>>, std::vector<MetadataFlag>{Metadata::FillGhost, Metadata::Cell},
+            auto t_copy_cell = tl.AddTask(t_none, Copy<MeshData<Real>>, std::vector<MetadataFlag>{Metadata::GetUserFlag("Explicit"), Metadata::Cell},
                     md_full_step_init.get(), md_preserve.get());
-            auto t_copy_face = tl.AddTask(t_none, CopyFace, std::vector<MetadataFlag>{Metadata::FillGhost, Metadata::Face}, 
+            auto t_copy_face = tl.AddTask(t_none, CopyFace, std::vector<MetadataFlag>{Metadata::GetUserFlag("Explicit"), Metadata::Face}, 
                     md_full_step_init.get(), md_preserve.get());
         }
     }
