@@ -55,6 +55,10 @@ TaskStatus InitializeGIZMO(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterIn
 
     auto datfn = pin->GetOrAddString("gizmo", "datfn", "none");
 
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("mdot")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("mdot", mdot);
+    if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rs")))
+        pmb->packages.Get("GRMHD")->AddParam<Real>("rs", rs);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("gizmo_dat")))
         pmb->packages.Get("GRMHD")->AddParam<std::string>("gizmo_dat", datfn);
     if(! (pmb->packages.Get("GRMHD")->AllParams().hasKey("rin_init")))
