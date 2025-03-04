@@ -65,7 +65,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
 
     // 1. Limit gamma with respect to normal observer
     if (floors.radius_dependent_gamma_max > 0 && G.r(k, j, i) > 1.5 * r_eh) {
-        Real V02 = SQR(myfloors.gamma_max);
+        Real V02 = m::pow(myfloors.V0, 2.);
         Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, floors.rs_bondi);
         Real betagamma2_max = V02 * vchar2;
         Real betagamma2 = SQR(gamma) - 1.;
@@ -141,12 +141,11 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
                     (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
             }
             if (del_rho < 0) {
-                printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
-                //printf("HYERIN: r=%.3g f=%.5g frac_rho=%.5g betagamma2=%.3g betagamma2_max=%.3g before: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g, after: u_t=%.3g, u^r=%.3g, U^1=%.5g, gamma*u*u^r*u_t=%.3g, b^2*u^r*u_t=%.3g, -b^r*b_t=%.3g\n", G.r(k, j, i), f, del_rho / rho_temp, betagamma2, betagamma2_max,
-                //        Dtmp_old.ucov[0], Dtmp_old.ucon[1], P(m_p.U1, k, j, i) / f, gamma * u_temp * Dtmp_old.ucon[1] * Dtmp_old.ucov[0],
-                //        dot(Dtmp_old.bcon, Dtmp_old.bcov) * Dtmp_old.ucon[1] * Dtmp_old.ucov[0], -Dtmp_old.bcon[1] * Dtmp_old.bcov[0],
-                //        Dtmp_new.ucov[0], Dtmp_new.ucon[1], P(m_p.U1, k, j, i), m::sqrt(1. + betagamma2_max) * u_temp * Dtmp_new.ucon[1] * Dtmp_new.ucov[0],
-                //        dot(Dtmp_new.bcon, Dtmp_new.bcov) * Dtmp_new.ucon[1] * Dtmp_new.ucov[0], -Dtmp_new.bcon[1] * Dtmp_new.bcov[0]);
+                //printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
+                printf("HYERIN: r=%.3g frac_rho=%.5g 1+u_t=%.5g->%.5g, u^r=%.3g->%.3g, b^2=%.3g->%.3g, b^r=%.3g->%.3g, b_t=%.3g->%.3g\n", 
+                        G.r(k, j, i), del_rho / rho_temp, 1. + Dtmp_old.ucov[0], 1. + Dtmp_new.ucov[0],
+                        Dtmp_old.ucon[1], Dtmp_new.ucon[1], dot(Dtmp_old.bcon, Dtmp_old.bcov), dot(Dtmp_new.bcon, Dtmp_new.bcov),
+                        Dtmp_old.bcon[1], Dtmp_new.bcon[1], Dtmp_old.bcov[0], Dtmp_new.bcov[0]);
             }
             //frac_rho = del_rho / rho_temp;
             //if (del_rho > rho_temp) {
@@ -176,14 +175,15 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
                     Dtmp_old.bcov[0], Dtmp_new.bcov[0], dot(Dtmp_old.bcon, Dtmp_old.bcov), dot(Dtmp_new.bcon, Dtmp_new.bcov),
                     rho_temp, del_rho, u_temp, del_u);
             }
-            del_rho = m::max(del_rho, 0.);
+            //del_rho = m::max(del_rho, 0.);
             P(m_p.RHO, k, j, i) += del_rho;
             P(m_p.UU, k, j, i) += del_u;
 
             //Real gamma_new = GRMHD::lorentz_calc(G, P, m_p, k, j, i, loc);
         }
 
-    } else if (gamma > myfloors.gamma_max) {
+    } 
+    if (gamma > myfloors.gamma_max) {
         Real f = m::sqrt((SQR(myfloors.gamma_max) - 1.) / (SQR(gamma) - 1.));
         VLOOP P(m_p.U1+v, k, j, i) *= f;
     }
@@ -271,7 +271,7 @@ KOKKOS_INLINE_FUNCTION int determine_floors(const GRCoordinates& G, const Variab
     Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
     const GReal r_eh = G.coords.get_horizon();
     if (myfloors.radius_dependent_gamma_max > 0 && G.r(k, j, i) > 1.5 * r_eh) {
-        Real V02 = SQR(myfloors.gamma_max);
+        Real V02 = m::pow(myfloors.V0, 2.);
         Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, myfloors.rs_bondi);
         Real betagamma2_max = V02 * vchar2;
         Real betagamma2 = SQR(gamma) - 1.;
