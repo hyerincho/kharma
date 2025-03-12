@@ -89,6 +89,7 @@ void KHARMA::PostInitialize(ParameterInput *pin, Mesh *pmesh, bool is_restart)
             // normalize the magnetic field according to the max density
             bool is_torus = prob_name == "torus";
             if (pin->GetOrAddBoolean("b_field", "norm", is_torus)) {
+                KHARMADriver::SyncAllBounds(md);
                 NormalizeBField(md.get(), pin);
             }
         }
@@ -98,7 +99,7 @@ void KHARMA::PostInitialize(ParameterInput *pin, Mesh *pmesh, bool is_restart)
     // since seeding may be based on density
     if (pin->GetOrAddBoolean("blob", "add_blob", false)) {
         for (auto &pmb : pmesh->block_list) {
-            auto rc = pmb->meshblock_data.Get();
+            auto rc = pmb->meshblock_data.Get("base");
             // This inserts only in vicinity of some global r,th,phi
             InsertBlob(rc.get(), pin);
         }

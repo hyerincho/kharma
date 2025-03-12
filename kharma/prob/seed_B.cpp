@@ -54,12 +54,14 @@ using namespace parthenon;
 template<typename T>
 inline T MPIReduce_once(T f, MPI_Op O)
 {
+    MPIBarrier();
     parthenon::AllReduce<T> reduction;
     reduction.val = f;
     reduction.StartReduce(O);
     // Wait on results
     while (reduction.CheckReduce() == parthenon::TaskStatus::incomplete);
     // TODO catch errors?
+    MPIBarrier();
     return reduction.val;
 }
 
@@ -558,7 +560,7 @@ TaskStatus NormalizeBField(MeshData<Real> *md, ParameterInput *pin)
     }
 
     // We've been initializing/manipulating P
-    Flux::MeshPtoU(md, IndexDomain::entire);
+    //Flux::MeshPtoU(md, IndexDomain::entire);
 
     EndFlag(); //NormBField
     return TaskStatus::complete;
