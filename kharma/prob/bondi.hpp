@@ -156,15 +156,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const bool di
     GReal r = Xembed[1];
     GReal th = Xembed[2];
 
-    // Allow cutting out areas by angle or radius to be replaced by floors
-    if ((th < bondi_clear_angle) || (th > M_PI - bondi_clear_angle)) {
-        rho = 0.;
-        u = 0.;
-        u_prim[0] = 0.;
-        u_prim[1] = 0.;
-        u_prim[2] = 0.;
-        return;
-    } else if (r < rin_bondi) {
+    if (r < rin_bondi) {
         // Optionally fill the interior region with the innermost analytically computed value
         if (fill_interior) {
             // just match at the rin_bondi value
@@ -202,6 +194,12 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const bool di
         // Normal bondi initialization
         rho = rho_tmp;
         u = u_tmp;
+    }
+    // Allow cutting out areas by angle or radius to be replaced by floors
+    if ((th < bondi_clear_angle) || (th > M_PI - bondi_clear_angle)) {
+        // HYERIN (03/19/25) I'd like to keep temperature the same
+        rho /= 100;
+        u /= 100;
     }
     Real ur = ur_tmp; // Bondi radial velocity solution
 
