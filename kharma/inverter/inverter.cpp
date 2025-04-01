@@ -1,25 +1,25 @@
-/* 
+/*
  *  File: inverter.cpp
- *  
+ *
  *  BSD 3-Clause License
- *  
+ *
  *  Copyright (c) 2020, AFD Group at UIUC
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  
+ *
  *  1. Redistributions of source code must retain the above copyright notice, this
  *     list of conditions and the following disclaimer.
- *  
+ *
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  
+ *
  *  3. Neither the name of the copyright holder nor the names of its
  *     contributors may be used to endorse or promote products derived from
  *     this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -36,6 +36,7 @@
 // inverter.hpp includes the template and instantiations in the correct order
 
 #include "domain.hpp"
+#include "flux.hpp"
 #include "reductions.hpp"
 
 int Inverter::CountPFlags(MeshData<Real> *md)
@@ -83,10 +84,20 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     }
 
     // Fixup options
+    // Whether hitting a floor in the Kastaun inverter counts as a "failure"
+    // Avoids using the floors applied during the Kastaun solve, since they can be temperamental
+    bool floors_are_failures = pin->GetOrAddBoolean("inverter", "floors_are_failures", false);
+    params.Add("floors_are_failures", floors_are_failures);
+    // Whether the Kastaun inverter returns failure if it has revised rho or u due to floors,
+    // but can't find a new consistent solution to return sensible velocities.
+    bool bad_vels_are_failures = pin->GetOrAddBoolean("inverter", "bad_vels_are_failures", true);
+    params.Add("bad_vels_are_failures", bad_vels_are_failures);
+
+    // Fix by averaging neighboring cells.  Enabled by default for 1Dw, but Kastaun failures are more dire
     bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", !use_kastaun);
     params.Add("fix_average_neighbors", fix_average_neighbors);
     // Fix by replacing with floors, uvec=0. Usually a fallback for no neighbors,
-    // but also used if Kastaun hits max_iter
+    // but also used if Kastaun ever fails for some reason (generally negative or near-negative input, so atmo makes sense)
     bool fix_atmosphere = pin->GetOrAddBoolean("inverter", "fix_atmosphere", true);
     params.Add("fix_atmosphere", fix_atmosphere);
     // TODO add version attempting to recover from entropy, stuff like that
@@ -107,9 +118,17 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Overridable});
     pkg->AddField("fflag", m);
 
-    // We exist basically to do this
-    pkg->BlockUtoP = Inverter::BlockUtoP;
-    pkg->BoundaryUtoP = Inverter::BlockUtoP;
+    // This package may be loaded even when evolving implicitly, e.g. for FOFC
+    // Only register our callbacks if they're needed for explicit evolution or a guess
+    if (!pin->GetBoolean("GRMHD", "implicit") || pin->GetBoolean("emhd", "ideal_guess")) {
+        // We exist basically to do this
+        pkg->BlockUtoP = Inverter::BlockUtoP;
+        // We want to run U->P on most boundaries when we're synchronizing conserved variables
+        pkg->BoundaryUtoP = Inverter::BlockUtoP;
+        // However, we apply domain boundaries to primitives.
+        // Registering this additional function conveys that to the callers in `Packages` and `Boundaries`
+        pkg->DomainBoundaryPtoU = Flux::BlockPtoUMHD;
+    }
 
     pkg->PostStepDiagnosticsMesh = Inverter::PostStepDiagnostics;
 
@@ -149,6 +168,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
     auto &pars = pmb->packages.Get("Inverter")->AllParams();
     const Real err_tol = pars.Get<Real>("err_tol");
     const int iter_max = pars.Get<int>("iter_max");
+    const bool floors_are_fails = pars.Get<bool>("floors_are_failures");
+    const bool bad_vels_are_fails = pars.Get<bool>("bad_vels_are_failures");
     const Floors::Prescription inverter_floors       = pars.Get<Floors::Prescription>("inverter_prescription");
     const Floors::Prescription inverter_floors_inner = pars.Get<Floors::Prescription>("inverter_prescription_inner");
     const bool radius_dependent_floors = inverter_floors.radius_dependent_floors;
@@ -156,10 +177,10 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
     const auto& G = pmb->coords;
 
     // Get the primitives from our conserved versions
-    // Notice we recover variables for only the physical (interior or interior-ghost)
+    // Notice by default, we recover variables for only the physical (interior or interior-ghost)
     // zones!  These are the only ones which are filled at our point in the step
-    auto bounds = coarse ? pmb->c_cellbounds : pmb->cellbounds;
-    const IndexRange3 b = KDomain::GetPhysicalRange(rc);
+    const IndexRange3 b = (domain == IndexDomain::entire)
+                          ? KDomain::GetPhysicalRange(rc) : KDomain::GetRange(rc, domain, coarse);
     pmb->par_for("U_to_P", b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             const Floors::Prescription& myfloors = (inverter_floors.radius_dependent_floors
@@ -171,6 +192,16 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
             pflag(0, k, j, i) = pflagl % Floors::FFlag::MINIMUM;
             int fflagl = (pflagl / Floors::FFlag::MINIMUM) * Floors::FFlag::MINIMUM;
             fflag(0, k, j, i) = fflagl;
+            // If bad/zeroed velocities shouldn't count as failures, set them back to 'success'
+            if (!bad_vels_are_fails && (pflagl % Floors::FFlag::MINIMUM == static_cast<int>(Inverter::Status::bad_velocity)))
+                pflag(0, k, j, i) = static_cast<double>(Inverter::Status::success);
+            // Optionally mark floored zones as "failed" to trigger averaging
+            if (floors_are_fails &&
+               (fflagl & Floors::FFlag::INVERTER_GAMMA ||
+                fflagl & Floors::FFlag::INVERTER_RHO ||
+                fflagl & Floors::FFlag::INVERTER_U ||
+                fflagl & Floors::FFlag::INVERTER_U_MAX))
+                pflag(0, k, j, i) = static_cast<double>(Inverter::Status::floor);
             // Generally after inversion we manipulate P and call this ourselves
             // Enable this if that doesn't stay true
             // if (fflagl) {

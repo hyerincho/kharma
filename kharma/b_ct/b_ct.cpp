@@ -856,7 +856,6 @@ TaskStatus B_CT::PrintGlobalMaxDivB(MeshData<Real> *md, bool kill_on_large_divb)
         // Print on rank zero
         if (MPIRank0() && print) {
             printf("Max DivB: %g\n", divb_max); // someday I'll learn stream options
-            std::cout << std::flush; // or how to flush stdout C-style
         }
         if (kill_on_large_divb) {
             if (divb_max > pmb0->packages.Get("B_CT")->Param<Real>("kill_on_divb_over"))
@@ -896,7 +895,8 @@ void B_CT::CalcDivB(MeshData<Real> *md, std::string divb_field_name)
 
 void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
 {
-    auto rc = pmb->meshblock_data.Get();
+    // This is called after the step, use "base" container
+    auto rc = pmb->meshblock_data.Get("base");
     const int ndim = pmb->pmy_mesh->ndim;
     if (ndim < 2) return;
 
