@@ -112,6 +112,8 @@ class CoordinateEmbedding {
                 transform.emplace<FunkyTransform>(mpark::get<FunkyTransform>(transform_in));
             } else if (mpark::holds_alternative<WidepoleTransform>(transform_in)) {
                 transform.emplace<WidepoleTransform>(mpark::get<WidepoleTransform>(transform_in));
+            } else if (mpark::holds_alternative<JetTransform>(transform_in)) {
+                transform.emplace<JetTransform>(mpark::get<JetTransform>(transform_in));
             }
         }
 
@@ -194,6 +196,14 @@ class CoordinateEmbedding {
                 GReal nx2 = pin->GetReal("parthenon/mesh", "nx2");
                 GReal nx3 = pin->GetReal("parthenon/mesh", "nx3");
                 transform.emplace<WidepoleTransform>(WidepoleTransform(lin_frac, smoothness, nx2, nx3));
+            } else if (transform_str == "jet" || transform_str == "jks") {
+                if (!spherical) throw std::invalid_argument("Transform is for spherical coordinates!");
+                int njet = pin->GetOrAddInteger("coordinates", "njet", 8);
+                GReal kjet = pin->GetOrAddReal("coordinates", "kjet", 8.0);
+                GReal pjet = pin->GetOrAddReal("coordinates", "pjet", 2.0);
+                GReal smoothness = pin->GetOrAddReal("coordinates", "smoothness", 0.000001);
+                GReal nx2 = pin->GetReal("parthenon/mesh", "nx2");
+                transform.emplace<JetTransform>(JetTransform(njet, kjet, pjet, smoothness, nx2));
             } else {
                 throw std::invalid_argument("Unsupported coordinate transform!");
             }
