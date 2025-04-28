@@ -199,7 +199,7 @@ KOKKOS_INLINE_FUNCTION void get_prim_bondi(const GRCoordinates& G, const bool di
     if ((th < bondi_clear_angle) || (th > M_PI - bondi_clear_angle)) {
         // HYERIN (03/19/25) I'd like to keep temperature the same
         rho /= 100;
-        u /= 100;
+        //u /= 100;
     }
     Real ur = ur_tmp; // Bondi radial velocity solution
 

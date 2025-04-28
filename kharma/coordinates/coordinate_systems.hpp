@@ -842,8 +842,70 @@ class JetTransform {
         }
 };
 
+/**
+ * Jet Kerr-Schild coordinates 2 (simpler!)
+ * Make sense only for spherical base systems!
+ */
+class JetTransform2 {
+    public:
+        static constexpr char name[] = "JetTransform2";
+        static constexpr GReal startx[3] = {-1, 0., 0.};
+        static constexpr GReal stopx[3] = {-1, 1., 2*M_PI};
+
+        const GReal smoothness;
+
+        // Constructor
+        KOKKOS_FUNCTION JetTransform2(GReal smoothness_in): smoothness(smoothness_in)
+        {
+        }
+
+        // Coordinate transformations
+        KOKKOS_INLINE_FUNCTION void coord_to_embed(const GReal Xnative[GR_DIM], GReal Xembed[GR_DIM]) const
+        {
+            Xembed[0] = Xnative[0];
+            Xembed[1] = exp(Xnative[1]);
+            GReal alpha = smoothness / (Xnative[1] + 0.5);
+            GReal th = M_PI / 2. * (1. + tanh((Xnative[2] - 0.5) / alpha) / tanh(0.5 / alpha));
+            Xembed[2] = excise(excise(th, 0.0, SMALL), M_PI, SMALL);
+            Xembed[3] = Xnative[3];
+        }
+        KOKKOS_INLINE_FUNCTION void coord_to_native(const GReal Xembed[GR_DIM], GReal Xnative[GR_DIM]) const
+        {
+            Xnative[0] = Xembed[0];
+            Xnative[1] = log(Xembed[1]);
+            Xnative[3] = Xembed[3];
+            // Treat the special case with a macro
+            ROOT_FIND
+        }
+        /**
+         * Transformation matrix for contravariant vectors to embedding, or covariant vectors to native
+         */
+        KOKKOS_INLINE_FUNCTION void dxdX(const GReal Xnative[GR_DIM], Real dxdX[GR_DIM][GR_DIM]) const
+        {
+            gzero2(dxdX);
+            dxdX[0][0] = 1.;
+            dxdX[1][1] = exp(Xnative[1]);
+            GReal alpha = smoothness / (Xnative[1] + 0.5);
+            GReal xprime = (Xnative[2] - 0.5) / alpha;
+            dxdX[2][2] = M_PI / (2. * m::pow(cosh(xprime), 2.) * alpha * tanh(0.5 / alpha));
+            dxdX[2][1] = M_PI / 2. * ((Xnative[2] - 0.5) / (smoothness * m::pow(cosh(xprime), 2.) * tanh(0.5 / alpha)) - 
+                                    tanh(xprime) * 0.5 / (smoothness * m::pow(sinh(0.5 / alpha), 2.)));
+            dxdX[3][3] = 1.;
+        }
+        /**
+         * Transformation matrix for contravariant vectors to native, or covariant vectors to embedding
+         */
+        KOKKOS_INLINE_FUNCTION void dXdx(const GReal Xnative[GR_DIM], Real dXdx[GR_DIM][GR_DIM]) const
+        {
+            // Okay this one should probably stay numerical
+            Real dxdX_tmp[GR_DIM][GR_DIM];
+            dxdX(Xnative, dxdX_tmp);
+            invert(&dxdX_tmp[0][0],&dXdx[0][0]);
+        }
+};
+
 // Bundle coordinates and transforms into umbrella variant types
 // These act as a wannabe "interface" or "parent class" with the exception that access requires "mpark::visit"
 // See coordinate_embedding.hpp
 using SomeBaseCoords = mpark::variant<SphMinkowskiCoords, CartMinkowskiCoords, SphBLCoords, SphKSCoords, SphBLExtG, SphKSExtG>;
-using SomeTransform = mpark::variant<NullTransform, SphNullTransform, ExponentialTransform, SuperExponentialTransform, ModifyTransform, FunkyTransform, WidepoleTransform, JetTransform>;
+using SomeTransform = mpark::variant<NullTransform, SphNullTransform, ExponentialTransform, SuperExponentialTransform, ModifyTransform, FunkyTransform, WidepoleTransform, JetTransform, JetTransform2>;
