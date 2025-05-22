@@ -505,8 +505,8 @@ void Multizone::ReadMultizoneRestart(ParameterInput *pin, Mesh *pmesh)
     Real t0_zone = restartReader->GetAttr<Real>("Params", "Multizone/t0_zone");
     int n0_zone = restartReader->GetAttr<int>("Params", "Multizone/n0_zone");
     //int switch_zone = restartReader->GetAttr<int>("Params", "Multizone/switch_zone");
-    //auto active_rin = restartReader->GetAttr<int>("Params", "Multizone/active_rin");
-    //auto active_rout = restartReader->GetAttr<int>("Params", "Multizone/active_rout");
+    auto active_rin = restartReader->GetAttr<int>("Params", "Multizone/active_rin");
+    auto active_rout = restartReader->GetAttr<int>("Params", "Multizone/active_rout");
     //auto active_iin = restartReader->GetAttr<int>("Params", "Multizone/active_iin");
     //auto active_iout = restartReader->GetAttr<int>("Params", "Multizone/active_iout");
     //auto dt_last_zone = restartReader->GetAttr<std::vector<Real>>("Params", "Multizone/dt_last_zone");
@@ -517,8 +517,8 @@ void Multizone::ReadMultizoneRestart(ParameterInput *pin, Mesh *pmesh)
     params.Update<Real>("t0_zone", t0_zone);
     params.Update<int>("n0_zone", n0_zone);
     //params.Update<bool>("switch_zone", true); // temporary
-    //params.Update<int>("active_rin", active_rin);
-    //params.Update<int>("active_rout", active_rout);
+    params.Update<int>("active_rin", active_rin);
+    params.Update<int>("active_rout", active_rout);
     //params.Update<int>("active_iin", active_iin);
     //params.Update<int>("active_iout", active_iout);
     //params.Update<std::vector<Real>>("dt_last_zone", dt_last_zone);
