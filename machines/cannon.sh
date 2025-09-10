@@ -15,6 +15,11 @@ if [[ "$ARGS" == *"rocky"* ]]; then
     else
       module load cmake/3.25.2-fasrc01
     fi
+    if [[ "$ARGS" == *"2gpu"* ]]; then
+      # CUDA aware MPI
+      MPI_NUM_PROCS=2
+      MPI_EXE="srun" #"mpirun" #
+    fi
     if [[ "$ARGS" == *"cudaaware"* ]]; then
       # CUDA aware MPI
       #module load ucx/1.14.1-fasrc02
