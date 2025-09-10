@@ -42,6 +42,7 @@
 #include "boundaries.hpp"
 #include "current.hpp"
 #include "floors.hpp"
+#include "floors_functions.hpp"
 #include "flux.hpp"
 #include "gr_coordinates.hpp"
 #include "grmhd_functions.hpp"

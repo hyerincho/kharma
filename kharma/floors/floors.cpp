@@ -151,7 +151,7 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
     // Otherwise stick to specified/default geometric floors
     Floors::Prescription floors_tmp;
     if (pmb->packages.AllPackages().count("Floors")) {
-        floors_tmp = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription_inner");
+        floors_tmp = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
     } else {
         // JUST rho & u geometric
         floors_tmp.rho_min_geom = pin->GetOrAddReal("floors", "rho_min_geom", 1e-6);
@@ -183,7 +183,7 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
             // Initial floors, so the radius-dependence of floors don't matter that much. 
             int fflag = determine_floors(G, P, m_p, gam, k, j, i, floors, floors, rhoflr_max, uflr_max);
             if (fflag) {
-                apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
+                apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, floors, U, m_u);
                 apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors, U, m_u);
                 // P->U for any modified zones
                 Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);

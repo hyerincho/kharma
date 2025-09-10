@@ -34,7 +34,7 @@
 #pragma once
 
 #include "floors.hpp"
-#include "onedw.hpp"
+#include "kastaun.hpp"
 #include "multizone.hpp"
 
 /**
@@ -75,6 +75,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
         Real T1_old[GR_DIM], T1_new[GR_DIM], T0_old[GR_DIM], T0_new[GR_DIM];
         Real FE_old, FE_new; // T^r_t + rho * u^r values
         Real E_old, E_new; // T^t_t + rho * u^t values
+        Real Ttr_old, Ttr_new; // T^t_r values
         Real del_rho; // extra density to add
         Real frac_rho; // fractional density to add
         Real del_u = 0.; // extra internal energy to add
@@ -87,7 +88,8 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
         
         // (T^t_t + rho * u^t) old
         Flux::calc_tensor(P, m_p, Dtmp_old, emhd_params, gam, k, j, i, 0, T0_old);
-        E_old = T0_old[0];// + rho_temp * Dtmp_old.ucon[0];
+        E_old = T0_old[0] + rho_temp * Dtmp_old.ucon[0];
+        Ttr_old = T0_old[1];
 
         if (betagamma2 > betagamma2_max && Dtmp_old.ucon[1] > 0 && FE_old < 0) {
             // only apply for outflowing gas cells
@@ -117,7 +119,8 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
             
             // (T^t_t + rho * u^t) new after changing velocities
             Flux::calc_tensor(P, m_p, Dtmp_new, emhd_params, gam, k, j, i, 0, T0_new);
-            E_new = T0_new[0];// + rho_temp * Dtmp_new.ucon[0];
+            E_new = T0_new[0] + rho_temp * Dtmp_new.ucon[0];
+            Ttr_new = T0_new[1];
             
             // determine how much rho to add
             if (floors.radius_dependent_gamma_max == 1) {
@@ -133,12 +136,17 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
                 del_rho = (FE_old - FE_new) / ((1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]);
             } else if (floors.radius_dependent_gamma_max == 4) {
                 // prescription # 4: preserves both FE and E
-                //del_rho = ((gam * Dtmp_new.ucon[0] * Dtmp_new.ucov[0] + gam - 1.) * (FE_old - FE_new) - 
-                //            gam * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] * (E_old - E_new)) / 
-                //    ((gam - 1.) * (1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]);
                 del_rho = ((gam * Dtmp_new.ucon[0] * Dtmp_new.ucov[0] + gam - 1.) * (FE_old - FE_new) - 
                             gam * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] * (E_old - E_new)) / 
-                    (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
+                    ((gam - 1.) * (1. + Dtmp_new.ucov[0]) * Dtmp_new.ucon[1]);
+                //del_rho = ((gam * Dtmp_new.ucon[0] * Dtmp_new.ucov[0] + gam - 1.) * (FE_old - FE_new) - 
+                //            gam * Dtmp_new.ucon[1] * Dtmp_new.ucov[0] * (E_old - E_new)) / 
+                //    (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
+            } else if (floors.radius_dependent_gamma_max == 5) {
+                // prescription # 5: preserves cons.U1 and cons.UU (03/04/25)
+                del_rho = ((gam * Dtmp_new.ucon[0] * Dtmp_new.ucov[0] + gam - 1.) * (Ttr_old - Ttr_new) - 
+                            gam * Dtmp_new.ucov[1] * Dtmp_new.ucon[0] * (E_old - E_new)) / 
+                    ((- gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucon[0] * Dtmp_new.ucov[1]);
             }
             if (del_rho < 0) {
                 //printf("HYERIN: r=%.3g frac_rho=%.5g\n", G.r(k, j, i), del_rho / rho_temp);
@@ -164,16 +172,20 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
                 del_u = betagamma2_max * (rho_temp + del_rho) / (gam * (gam - 1.)) - u_temp;
             } else if (floors.radius_dependent_gamma_max == 4) {
                 // prescription # 4 (01/23/25)
-                //del_u = (E_old - E_new) / (gam - 1.) - 
-                //                    (FE_old - FE_new) * Dtmp_new.ucon[0] / ((gam - 1.) * Dtmp_new.ucon[1]);
-                del_u = (Dtmp_new.ucon[1] * (1. + Dtmp_new.ucov[0]) * (E_old - E_new)  - 
-                         Dtmp_new.ucon[0] * Dtmp_new.ucov[0] * (FE_old - FE_new)) /
-                    (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
+                del_u = (E_old - E_new) / (gam - 1.) - 
+                                    (FE_old - FE_new) * Dtmp_new.ucon[0] / ((gam - 1.) * Dtmp_new.ucon[1]);
+                //del_u = (Dtmp_new.ucon[1] * (1. + Dtmp_new.ucov[0]) * (E_old - E_new)  - 
+                //         Dtmp_new.ucon[0] * Dtmp_new.ucov[0] * (FE_old - FE_new)) /
+                //    (((gam * Dtmp_new.ucon[0] + gam - 1.) * Dtmp_new.ucov[0] + gam - 1.) * Dtmp_new.ucon[1]);
             printf("HYERIN: FE_old %.5g FE_new %.5g E_old %.5g E_new %.5g u^0 %.5g -> %.5g u^1 %.5g -> %.5g u_0 %.5g -> %.5g b^0 %.5g -> %.5g b^1 %.5g -> %.5g b_0 %.5g -> %.5g bsq %.5g -> %.5g rho %.5g delrho %.5g u %.5g delu %.5g \n",
                     FE_old, FE_new, E_old, E_new, Dtmp_old.ucon[0], Dtmp_new.ucon[0], Dtmp_old.ucon[1], Dtmp_new.ucon[1], 
                     Dtmp_old.ucov[0], Dtmp_new.ucov[0], Dtmp_old.bcon[0], Dtmp_new.bcon[0], Dtmp_old.bcon[1], Dtmp_new.bcon[1],
                     Dtmp_old.bcov[0], Dtmp_new.bcov[0], dot(Dtmp_old.bcon, Dtmp_old.bcov), dot(Dtmp_new.bcon, Dtmp_new.bcov),
                     rho_temp, del_rho, u_temp, del_u);
+            } else if (floors.radius_dependent_gamma_max == 5) {
+                // prescription # 5 (03/04/25)
+                del_u = ((E_old - E_new) - (Ttr_old - Ttr_new) * (1. + Dtmp_new.ucov[0]) / Dtmp_new.ucov[1]) / 
+                            (gam - 1. - gam * Dtmp_new.ucon[0]);
             }
             //del_rho = m::max(del_rho, 0.);
             P(m_p.RHO, k, j, i) += del_rho;
@@ -295,6 +307,7 @@ KOKKOS_INLINE_FUNCTION int determine_floors(const GRCoordinates& G, const Variab
 
 #define FLOOR_ONE_ARGS const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const Real& gam, \
                         const int& k, const int& j, const int& i, const Real& rhoflr_max, const Real& uflr_max, \
+                        const Floors::Prescription& floors, \
                         const VariablePack<Real>& U, const VarMap& m_u
 
 /**
@@ -415,11 +428,9 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal>(FLOOR_ONE_ARGS)
     U(m_u.U2, k, j, i)  += T[2];
     U(m_u.U3, k, j, i)  += T[3];
     
-    // Recover primitive variables from conserved versions
-    // Kastaun would need real vals here...
-    const Floors::Prescription floor_tmp = {0}; 
-    return Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                     floor_tmp, 8, 1e-8);
+    // Recover primitive variables from conserved versions.  Use Kastaun with safe parameters so we don't fail often
+    return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
+                                                        floors, 25, 1e-12);
 }
 
 /**

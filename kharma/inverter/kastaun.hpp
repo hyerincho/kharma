@@ -62,7 +62,7 @@
 #include "invert_template.hpp"
 
 #include "coordinate_utils.hpp"
-#include "floors_functions.hpp"
+//#include "floors_functions.hpp"
 #include "grmhd_functions.hpp"
 #include "kharma_utils.hpp"
 

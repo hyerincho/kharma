@@ -85,11 +85,11 @@ TaskStatus ApplyFloorsInFrame(MeshData<Real> *md, IndexDomain domain)
                     if (G.r(k, j, i) > switch_r) {
                         pflag_l = apply_floors<InjectionFrame::fluid>(G, P(b), m_p, gam, k, j, i,
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
-                                            U(b), m_u);
+                                            floors, U(b), m_u);
                     } else {
                         pflag_l = apply_floors<InjectionFrame::normal>(G, P(b), m_p, gam, k, j, i,
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
-                                            U(b), m_u);
+                                            floors, U(b), m_u);
                     }
                 } else if (frame == InjectionFrame::mixed_normal_drift) {
                     FourVectors Dtmp;
@@ -99,16 +99,16 @@ TaskStatus ApplyFloorsInFrame(MeshData<Real> *md, IndexDomain domain)
                     if (mag_switch < switch_beta) {
                         pflag_l = apply_floors<InjectionFrame::drift>(G, P(b), m_p, gam, k, j, i,
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
-                                            U(b), m_u);
+                                            floors, U(b), m_u);
                     } else {
                         pflag_l = apply_floors<InjectionFrame::normal>(G, P(b), m_p, gam, k, j, i,
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
-                                            U(b), m_u);
+                                            floors, U(b), m_u);
                     }
                 } else {
                     pflag_l = apply_floors<frame>(G, P(b), m_p, gam, k, j, i,
                                         floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
-                                        U(b), m_u);
+                                        floors, U(b), m_u);
                 }
 
                 // Record the pflag if nonzero, that is, if *either* the initial inversion or
