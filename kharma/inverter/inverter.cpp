@@ -51,7 +51,7 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
 
     // Inversion scheme.  Could be separate packages but they do share a lot,
     // and could share more e.g. inline floor applications
-    std::vector<std::string> allowed_inverter_names = {"none", "onedw", "kastaun"};
+    std::vector<std::string> allowed_inverter_names = {"none", "onedw", "kastaun", "mixed"};
     std::string inverter_name = pin->GetOrAddString("inverter", "type", "kastaun", allowed_inverter_names);
     bool use_kastaun = false;
     if (inverter_name == "onedw") {
@@ -59,6 +59,8 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     } else if (inverter_name == "kastaun") {
         params.Add("inverter_type", Type::kastaun);
         use_kastaun = true;
+    } else if (inverter_name == "mixed") {
+        params.Add("inverter_type", Type::mixed);
     } else if (inverter_name == "none") {
         params.Add("inverter_type", Type::none);
     }
@@ -181,14 +183,29 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
     // zones!  These are the only ones which are filled at our point in the step
     const IndexRange3 b = (domain == IndexDomain::entire)
                           ? KDomain::GetPhysicalRange(rc) : KDomain::GetRange(rc, domain, coarse);
+    bool mixed_inverter = false;
+    if constexpr (inverter == Inverter::Type::mixed) mixed_inverter = true;
     pmb->par_for("U_to_P", b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             const Floors::Prescription& myfloors = (inverter_floors.radius_dependent_floors
                                             && G.coords.is_spherical()
                                             && G.r(k, j, i) < inverter_floors.floors_switch_r) ?
                                             inverter_floors_inner : inverter_floors;
-            int pflagl = Inverter::u_to_p<inverter>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                    myfloors, iter_max, err_tol);
+            int pflagl;
+            if (mixed_inverter) {
+                if (G.r(k, j, i) < 1000) {
+                    pflagl = Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
+                                                        myfloors, 25, 1e-12);
+                }
+                else {
+                    pflagl = Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
+                                                        myfloors, iter_max, err_tol);
+                }
+            }
+            else {
+                pflagl = Inverter::u_to_p<inverter>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
+                                                        myfloors, iter_max, err_tol);
+            }
             pflag(0, k, j, i) = pflagl % Floors::FFlag::MINIMUM;
             int fflagl = (pflagl / Floors::FFlag::MINIMUM) * Floors::FFlag::MINIMUM;
             fflag(0, k, j, i) = fflagl;
@@ -196,7 +213,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
             if (!bad_vels_are_fails && (pflagl % Floors::FFlag::MINIMUM == static_cast<int>(Inverter::Status::bad_velocity)))
                 pflag(0, k, j, i) = static_cast<double>(Inverter::Status::success);
             // Optionally mark floored zones as "failed" to trigger averaging
-            if (floors_are_fails &&
+            if ((floors_are_fails && G.r(k, j, i) > 1000) &&
                (fflagl & Floors::FFlag::INVERTER_GAMMA ||
                 fflagl & Floors::FFlag::INVERTER_RHO ||
                 fflagl & Floors::FFlag::INVERTER_U ||
@@ -222,6 +239,9 @@ void Inverter::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool coars
         break;
     case Type::kastaun:
         BlockPerformInversion<Type::kastaun>(rc, domain, coarse);
+        break;
+    case Type::mixed:
+        BlockPerformInversion<Type::mixed>(rc, domain, coarse);
         break;
     case Type::none:
         break;
