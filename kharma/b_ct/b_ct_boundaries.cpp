@@ -365,7 +365,7 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real> *rc, IndexDomain domain, cons
                     
                     // Recover primitive GRMHD variables from our modified U
                     Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, jf, i, P, m_p, Loci::center,
-                                                              floors, 8, 1e-8);
+                                                              8, 1e-8);
                 }
             );
         }
