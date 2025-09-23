@@ -114,6 +114,8 @@ class Prescription {
         bool use_r_char, temp_adjust_u, adjust_k;
         // Radius dependent floors?
         bool radius_dependent_floors;
+        // Add density to respect the gamma ceiling?
+        bool use_rho_to_slow;
         Real floors_switch_r;
         // Radius dependent gamma max with an energy flux preserving feature
         int radius_dependent_gamma_max;
@@ -165,6 +167,7 @@ inline Prescription MakePrescription(parthenon::ParameterInput *pin, std::string
     // Limit the fluid Lorentz factor gamma
     p.gamma_max = pin->GetOrAddReal(block, "gamma_max", 50.);
 
+    p.use_rho_to_slow = pin->GetOrAddBoolean("floors", "use_rho_to_slow", true);
     p.radius_dependent_floors = pin->GetOrAddBoolean("floors", "radius_dependent_floors", false); 
     p.floors_switch_r = pin->GetOrAddReal("floors", "floors_switch_r", 50.);
     p.radius_dependent_gamma_max = pin->GetOrAddInteger("floors", "radius_dependent_gamma_max", 0); 
