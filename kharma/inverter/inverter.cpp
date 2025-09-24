@@ -44,10 +44,6 @@ int Inverter::CountPFlags(MeshData<Real> *md)
     return Reductions::CountFlags(md, "pflag", Inverter::status_names, IndexDomain::interior, false)[0];
 }
 
-Real Inverter::func_W(const Real W, const Real Sparsq, const Real Sperpsq, const Real rhoh, const Real Bsq){
-    return Sparsq / m::pow(rhoh * W * W, 2.) + Sperpsq / m::pow(rhoh * W * W + Bsq, 2.) + 1. / (W * W) - 1.;
-}
-
 std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {
     auto pkg = std::make_shared<KHARMAPackage>("Inverter");
@@ -218,7 +214,6 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                 Real rhoflr_max, uflr_max;
 
                 int fflagl = 0; // Could read fflag here to preserve prior floors but there better not be any
-                bool used_rho_to_slow = false;
                 if (normal_frame_floors) {
                     fflagl |= Floors::determine_floors(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner,
                         rhoflr_max, uflr_max);
@@ -252,11 +247,17 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         SPACELOOP(ii) Ssq += Scon[ii] * Scov[ii];
 
                         const Real gamma_max = inverter_floors.gamma_max;
-                        const Real rhoh_min = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max))) * 5.; // HC: x 5 for extra stability
+                        const Real rhoh_min = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)));
+                        Real rho_final, u_final, rhoh_final;
                         if (rhoh < rhoh_min) {
-                            used_rho_to_slow = true;
-                            rhoflr_max = rho * rhoh_min/rhoh;
-                            uflr_max = u * rhoh_min/rhoh;
+                            rho_final = rho * rhoh_min/rhoh;
+                            u_final = u * rhoh_min/rhoh;
+                            rhoh_final = rhoh_min;
+                        } else {
+                            rho_final = rho;
+                            u_final = u;
+                            rhoh_final = rhoh;
+                        }
 
                             Real Bvec[] = {0.0, 0.0, 0.0};
                             SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
@@ -270,38 +271,42 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             SPACELOOP(ii) Spar[ii] = BdotS * Bvec[ii] / Bsq;
                             SPACELOOP(ii) Sperp[ii] = Scon[ii] - Spar[ii];
 
+                    		// Equation for Lorentz factor W
+                            auto fW = [&] (Real W) {
+                                const Real rhohW2 = rhoh_final*W*W;
+                                return Sparsq / SQR(rhohW2)
+                                        + Sperpsq / SQR(rhohW2 + Bsq)
+                                        + 1./(W*W) - 1.;
+                            };
+
                             Real zm = 1.;
                             Real zp = gamma_max;
                             Real z = 0.5*(zm + zp);
-                            Real fm = Inverter::func_W(zm, Sparsq, Sperpsq, rhoh_min, Bsq);
-                            Real fp = Inverter::func_W(zp, Sparsq, Sperpsq, rhoh_min, Bsq);
+                            Real fm = fW(zm);
+                            Real fp = fW(zp);
 
                             Real tol = 1e-8;
                             int iter;
                             for (iter = 0; iter < 30; ++iter) {
                                 z =  (zm*fp - zp*fm)/(fp-fm);  // linear interpolation to point f(z)=0
-                                Real f = Inverter::func_W(z, Sparsq, Sperpsq, rhoh_min, Bsq);
+                                Real f = fW(z);
                                 // Quit if convergence reached
-                                // NOTE(@ermost): both z and f are of order unity
                                 if ((m::abs(zm-zp) < tol) || (m::abs(f) < tol)) {
                                     break;
                                 }
-                                // assign zm-->zp if root bracketed by [z,zp]
+                                // root bracketed by [z,zp]
                                 if (f*fp < 0.0) {
-                                    zm = zp;
-                                    fm = fp;
-                                    zp = z;
-                                    fp = f;
-                                } else {  // assign zp-->z if root bracketed by [zm,z]
-                                    fm = 0.5*fm; // 1/2 comes from "Illinois algorithm" to accelerate convergence
+                                    zm = z;
+                                    fm = f;
+                                } else {  // root bracketed by [zm,z]
                                     zp = z;
                                     fp = f;
                                 }
                             }
-                            P(m_p.RHO, k, j, i) = rhoflr_max;
-                            P(m_p.UU, k, j, i) = uflr_max;
-                            SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_min * z * z) + Sperp[ii] / (rhoh_min * z * z + Bsq));
-                        }
+                            // Should I apply this for all cases when the floor is applied, without calling normal floors?
+                            P(m_p.RHO, k, j, i) = rho_final;
+                            P(m_p.UU, k, j, i) = u_final;
+                            SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_final * z * z) + Sperp[ii] / (rhoh_final * z * z + Bsq));
                     }
                 } else {
                     // Bare minimum floors for numerics, before applying the rest in user-selected frame
@@ -310,7 +315,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                     if (P(m_p.RHO, k, j, i) < rhoflr_max) fflagl |= Floors::FFlag::GEOM_RHO;
                     if (P(m_p.UU, k, j, i) < uflr_max) fflagl |= Floors::FFlag::GEOM_U;
                 }
-                if (fflagl && (!used_rho_to_slow)) {
+                if (fflagl && (!inverter_floors.use_rho_to_slow)) {
                     // Apply floors to P -- this calls inversion again
                     pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
                             rhoflr_max, uflr_max, U, m_u);

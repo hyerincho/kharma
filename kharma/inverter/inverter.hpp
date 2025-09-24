@@ -93,8 +93,6 @@ inline TaskStatus MeshFixUtoP(MeshData<Real> *md) {
  */
 int CountPFlags(MeshData<Real> *md);
 
-Real func_W(const Real W, const Real Sparsq, const Real Sperpsq, const Real rhoh, const Real Bsq);
-
 /**
  * Print details of any inversion failures or fixed zones
  */
