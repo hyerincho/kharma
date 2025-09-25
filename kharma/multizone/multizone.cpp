@@ -112,8 +112,8 @@ std::shared_ptr<KHARMAPackage> Multizone::Initialize(ParameterInput *pin, std::s
     params.Add("nzones_eff", nzones_eff);
 
     // also save active rin and rout as mutable parameters
-    const int active_rin_init = m::pow(base, nzones_eff + offset - 1);
-    const int active_rout_init = m::pow(base, nzones + 1);
+    const Real active_rin_init = m::pow(base, nzones_eff + offset - 1);
+    const Real active_rout_init = m::pow(base, nzones + 1);
     if(! params.hasKey("active_rin"))
         params.Add("active_rin", active_rin_init, true);
     if(! params.hasKey("active_rout"))
@@ -150,8 +150,8 @@ void Multizone::DecideActiveBlocksAndBoundaryConditions(Mesh *pmesh, const SimTi
     const Real gam = pmesh->packages.Get("GRMHD")->Param<Real>("gamma");
     const Real f_tchar = params.Get<Real>("f_tchar");
     const bool loc_tchar = params.Get<bool>("loc_tchar");
-    const int active_rin = params.Get<int>("active_rin");
-    const int active_rout = params.Get<int>("active_rout");
+    const Real active_rin = params.Get<Real>("active_rin");
+    const Real active_rout = params.Get<Real>("active_rout");
     const auto outer_x1_btype_name = params_bdry.Get<std::string>("outer_x1");
 
     // Current location in V-cycles
@@ -221,8 +221,8 @@ void Multizone::GetActiveZoneBoundary(Mesh *pmesh)
 {
     Flag("GetActiveZoneBoundary");
     auto &params = pmesh->packages.Get("Multizone")->AllParams();
-    const int active_rin = params.Get<int>("active_rin");
-    const int active_rout = params.Get<int>("active_rout");
+    const Real active_rin = params.Get<Real>("active_rin");
+    const Real active_rout = params.Get<Real>("active_rout");
     Real active_x1min = m::log(active_rin);
     Real active_x1max = m::log(active_rout);
     const auto &G = pmesh->block_list[0]->coords;
@@ -288,14 +288,14 @@ void Multizone::DecideToSwitch(Mesh *pmesh, const SimTime &tm, bool verbose)
         params.Update<std::vector<Real>>("dt_last_zone", dt_last_zone);
         
         // Range of radii that is active
-        int active_rout;
+        Real active_rout;
         int offset = 0;
         if (base < 8 && i_zone > 0) offset = ((int) m::ceil(m::log(8) / m::log(base))) - 1;
-        int active_rin = m::pow(base, i_zone + offset);
+        Real active_rin = m::pow(base, i_zone + offset);
         if ((move_rin) || ((combine_out || combine_two_largest) && (i_zone == nzones_eff - 1))) active_rout = m::pow(base, nzones + 1);
         else active_rout =  m::pow(base, i_zone + offset + 2);
-        params.Update<int>("active_rin", active_rin);
-        params.Update<int>("active_rout", active_rout);
+        params.Update<Real>("active_rin", active_rin);
+        params.Update<Real>("active_rout", active_rout);
         if (verbose) std::cout << "i_within_vcycle" << i_within_vcycle << " i_zone " << i_zone << " i_vcycle " << i_vcycle << " active_rout " << active_rout << " active_rin " << active_rin << std::endl;
     }
 
@@ -505,8 +505,8 @@ void Multizone::ReadMultizoneRestart(ParameterInput *pin, Mesh *pmesh)
     Real t0_zone = restartReader->GetAttr<Real>("Params", "Multizone/t0_zone");
     int n0_zone = restartReader->GetAttr<int>("Params", "Multizone/n0_zone");
     //int switch_zone = restartReader->GetAttr<int>("Params", "Multizone/switch_zone");
-    auto active_rin = restartReader->GetAttr<int>("Params", "Multizone/active_rin");
-    auto active_rout = restartReader->GetAttr<int>("Params", "Multizone/active_rout");
+    auto active_rin = restartReader->GetAttr<Real>("Params", "Multizone/active_rin");
+    auto active_rout = restartReader->GetAttr<Real>("Params", "Multizone/active_rout");
     //auto active_iin = restartReader->GetAttr<int>("Params", "Multizone/active_iin");
     //auto active_iout = restartReader->GetAttr<int>("Params", "Multizone/active_iout");
     //auto dt_last_zone = restartReader->GetAttr<std::vector<Real>>("Params", "Multizone/dt_last_zone");
@@ -517,8 +517,8 @@ void Multizone::ReadMultizoneRestart(ParameterInput *pin, Mesh *pmesh)
     params.Update<Real>("t0_zone", t0_zone);
     params.Update<int>("n0_zone", n0_zone);
     //params.Update<bool>("switch_zone", true); // temporary
-    params.Update<int>("active_rin", active_rin);
-    params.Update<int>("active_rout", active_rout);
+    params.Update<Real>("active_rin", active_rin);
+    params.Update<Real>("active_rout", active_rout);
     //params.Update<int>("active_iin", active_iin);
     //params.Update<int>("active_iout", active_iout);
     //params.Update<std::vector<Real>>("dt_last_zone", dt_last_zone);
