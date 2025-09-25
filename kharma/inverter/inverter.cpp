@@ -316,6 +316,18 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                     pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
                             rhoflr_max, uflr_max, U, m_u);
                     apply_ceilings(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner, U, m_u);
+                    // if still too low, apply bare minimum floors
+                    rhoflr_max = inverter_floors.rho_min_const;
+                    uflr_max = inverter_floors.u_min_const;
+                    if (P(m_p.RHO, k, j, i) < rhoflr_max) {
+                        fflagl |= Floors::FFlag::GEOM_RHO;
+                        P(m_p.RHO, k, j, i) = rhoflr_max;
+                    }
+                    if (P(m_p.UU, k, j, i) < uflr_max) {
+                        fflagl |= Floors::FFlag::GEOM_U;
+                        P(m_p.UU, k, j, i) = uflr_max;
+                    }
+
                 }
                 
                 // If we recovered the velocity, mark we used the gamma ceiling

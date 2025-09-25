@@ -245,7 +245,8 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     }
     //const Real zsq = rsq / h0sq_; // h0sq_ normalization set to 1 in Phoebus
     const Real zsq = rsq;
-    const Real v0sq = std::min(zsq / (1.0 + zsq), 1.0 - 1.0 / SQR(51.));
+    //const Real v0sq = std::min(zsq / (1.0 + zsq), 1.0 - 1.0 / SQR(51.));
+    const Real v0sq = zsq / (1.0 + zsq);
 
     // residual object. Caches most arguments/floors so calls are single-argument
     KastaunResidual res(D, q, bsq, bsq_rpsq, rsq, rbsq, v0sq, gam);
@@ -337,9 +338,9 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     const Real qbar = res.qbar_mu(mu, x);
     // These values should be as *raw* as possible, whether or not they respect the floors
     // (or even physics).  We will add material and try again if they're bad
-    P(m_p.RHO, k, j, i) = std::max(res.rhohat_mu(iW), 0.);
-    P(m_p.UU, k, j, i) = std::max(res.ehat_mu(mu, qbar, rbarsq, vsq, W) * P(m_p.RHO, k, j, i), 0.);
-    SPACELOOP(ii) P(m_p.U1 + ii, k, j, i) = std::max(W * mu * x, 0.) * (rcon[ii] + mu * bdotr * bu[ii]);
+    P(m_p.RHO, k, j, i) = res.rhohat_mu(iW);
+    P(m_p.UU, k, j, i) = res.ehat_mu(mu, qbar, rbarsq, vsq, W) * P(m_p.RHO, k, j, i);
+    SPACELOOP(ii) P(m_p.U1 + ii, k, j, i) = W * mu * x * (rcon[ii] + mu * bdotr * bu[ii]);
 
     // Check if convergence is established within max_iterations
     // Leave the primitive vars
