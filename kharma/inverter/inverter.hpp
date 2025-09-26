@@ -41,6 +41,7 @@
 #include "invert_template.hpp"
 #include "onedw.hpp"
 #include "kastaun.hpp"
+#include "emhd.hpp"
 
 #include "pack.hpp"
 

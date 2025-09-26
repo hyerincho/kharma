@@ -184,6 +184,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                                         true;
 
     const auto& G = pmb->coords;
+    const EMHD::EMHD_parameters& emhd_params = EMHD::GetEMHDParameters(pmb->packages);
 
     // Get the primitives from our conserved versions
     // Notice by default, we recover variables for only the physical (interior or interior-ghost)
@@ -302,6 +303,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             P(m_p.RHO, k, j, i) = rhoflr_max;
                             P(m_p.UU, k, j, i) = uflr_max;
                             SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_min * z * z) + Sperp[ii] / (rhoh_min * z * z + Bsq));
+                            // P->U for any modified zones
+                            Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
                         }
                     }
                 } else {
@@ -327,6 +330,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         fflagl |= Floors::FFlag::GEOM_U;
                         P(m_p.UU, k, j, i) = uflr_max;
                     }
+                    // P->U for any modified zones
+                    Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
 
                 }
                 
