@@ -250,11 +250,18 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
                         const Real gamma_max = inverter_floors.gamma_max;
                         const Real rhoh_min = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)));
+                        used_rho_to_slow = true;
+                        Real rhoh_final;
                         if (rhoh < rhoh_min) {
                             fflagl |= Floors::FFlag::INVERTER_GAMMA;
-                            used_rho_to_slow = true;
                             rhoflr_max = rho * rhoh_min/rhoh;
                             uflr_max = u * rhoh_min/rhoh;
+                            rhoh_final = rhoh_min;
+                        } else {
+                            rhoflr_max = rho;
+                            uflr_max = u;
+                            rhoh_final = rhoh;
+                        }
 
                             Real Bvec[] = {0.0, 0.0, 0.0};
                             SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
@@ -270,7 +277,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
                     		// Equation for Lorentz factor W
                             auto fW = [&] (Real W) {
-                                const Real rhohW2 = rhoh_min*W*W;
+                                const Real rhohW2 = rhoh_final*W*W;
                                 return Sparsq / SQR(rhohW2)
                                         + Sperpsq / SQR(rhohW2 + Bsq)
                                         + 1./(W*W) - 1.;
@@ -302,10 +309,9 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             }
                             P(m_p.RHO, k, j, i) = rhoflr_max;
                             P(m_p.UU, k, j, i) = uflr_max;
-                            SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_min * z * z) + Sperp[ii] / (rhoh_min * z * z + Bsq));
+                            SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_final * z * z) + Sperp[ii] / (rhoh_final * z * z + Bsq));
                             // P->U for any modified zones
                             Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
-                        }
                     }
                 } else {
                     // Bare minimum floors for numerics, before applying the rest in user-selected frame
@@ -331,7 +337,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         P(m_p.UU, k, j, i) = uflr_max;
                     }
                     // P->U for any modified zones
-                    Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
+                    //Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
 
                 }
                 
