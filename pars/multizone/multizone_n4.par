@@ -57,7 +57,7 @@ u_over_rho_max = 100
 bsq_over_rho_max = 100
 gamma_max = 5
 adjust_k = 0
-radius_dependent_gamma_max = 1
+radius_dependent_gamma_max = 0
 
 # We'll be adding material, and that's okay
 <boundaries>
