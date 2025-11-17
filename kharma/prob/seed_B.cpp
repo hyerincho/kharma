@@ -117,6 +117,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                   Seed == BSeedType::monopole ||
                   Seed == BSeedType::orszag_tang ||
                   Seed == BSeedType::wave || 
+                  Seed == BSeedType::toroidal || 
                   Seed == BSeedType::shock_tube)
     {
         // All custom B fields should set what they need of these.
@@ -483,6 +484,8 @@ TaskStatus SeedBField(MeshData<Real> *md, ParameterInput *pin)
             status = SeedBFieldType<BSeedType::orszag_tang_a>(rc, pin);
         } else if (b_field_type == "wave") {
             status = SeedBFieldType<BSeedType::wave>(rc, pin);
+        } else if (b_field_type == "toroidal") {
+            status = SeedBFieldType<BSeedType::toroidal>(rc, pin);
         } else if (b_field_type == "shock_tube") {
             status = SeedBFieldType<BSeedType::shock_tube>(rc, pin);
         } else {

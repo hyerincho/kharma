@@ -51,7 +51,7 @@ TaskStatus NormalizeBField(MeshData<Real> *md, ParameterInput *pin);
  */
 
 // Internal representation of the field initialization preference, used for templating
-enum BSeedType{constant, monopole, orszag_tang, orszag_tang_a, wave, shock_tube,
+enum BSeedType{constant, monopole, orszag_tang, orszag_tang_a, wave, toroidal, shock_tube,
                 sane, mad, mad_quadrupole, r3s3, r5s5, gaussian, bz_monopole, vertical, r1s2, r1gizmo};
 
 #define SEEDA_ARGS GReal *x, const GReal *dxc, double rho, double rin, double min_A, double A0, double arg1, double rb, double r_mag
@@ -172,6 +172,15 @@ KOKKOS_INLINE_FUNCTION void seed_b<BSeedType::wave>(SEEDB_ARGS)
     B1 += amp_B1 * cmode + amp2_B1 * smode;
     B2 += amp_B2 * cmode + amp2_B2 * smode;
     B3 += amp_B3 * cmode + amp2_B3 * smode;
+}
+
+// For toroidal field that gives beta~1
+template<>
+KOKKOS_INLINE_FUNCTION void seed_b<BSeedType::toroidal>(SEEDB_ARGS)
+{
+    const Real smode = m::sin(k1 * x[1] + k2 * x[2] + k3 * x[3] + phase);
+    const Real cmode = m::cos(k1 * x[1] + k2 * x[2] + k3 * x[3] + phase);
+    B3 += amp_B3 / (x[1] * x[1]);
 }
 
 // Shock tube init
