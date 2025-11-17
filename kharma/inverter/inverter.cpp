@@ -38,6 +38,7 @@
 #include "floors_functions.hpp"
 #include "flux.hpp"
 #include "reductions.hpp"
+#include "multizone.hpp"
 
 int Inverter::CountPFlags(MeshData<Real> *md)
 {
@@ -248,7 +249,15 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         Real Ssq = 0.0;
                         SPACELOOP(ii) Ssq += Scon[ii] * Scov[ii];
 
-                        const Real gamma_max = inverter_floors.gamma_max;
+                        Real gamma_max = inverter_floors.gamma_max;
+                        const int radius_dependent_gamma_max = inverter_floors.radius_dependent_gamma_max;
+                        if (radius_dependent_gamma_max > 0 && G.r(k, j, i) > 3) {
+                            Real V02 = m::pow(inverter_floors.V0, 2.);
+                            Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, inverter_floors.rs_bondi);
+                            Real betagamma2_max = V02 * vchar2;
+                            gamma_max = m::sqrt(betagamma2_max + 1.);
+                        }
+
                         const Real rhoh_min = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)));
                         if (rhoh < rhoh_min) {
                             fflagl |= Floors::FFlag::INVERTER_GAMMA;
