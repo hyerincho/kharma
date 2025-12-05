@@ -257,13 +257,17 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             Real betagamma2_max = V02 * vchar2;
                             gamma_max = m::sqrt(betagamma2_max + 1.);
                         }
+                        Real rhou0_old = U(m_u.RHO, k, j, i);
+                        Real Ttt_old = U(m_u.UU, k, j, i); // - rhou0_old;
+                        Real Ttr_old = U(m_u.U1, k, j, i);
+                        Real Ttrnet_old = U(m_u.U1, k, j, i) - P(m_p.RHO, k, j, i) * P(m_p.U1, k, j, i) * G.gdet(Loci::center, j, i);
 
                         const Real rhoh_min = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)));
                         if (rhoh < rhoh_min) {
                             fflagl |= Floors::FFlag::INVERTER_GAMMA;
                             used_rho_to_slow = true;
-                            rhoflr_max = rho * rhoh_min/rhoh;
-                            uflr_max = u * rhoh_min/rhoh;
+                            rhoflr_max = rhoh_min -  gam * u;//rho * rhoh_min/rhoh;
+                            uflr_max = u; // * rhoh_min/rhoh;
 
                             Real Bvec[] = {0.0, 0.0, 0.0};
                             SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
@@ -314,6 +318,19 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_min * z * z) + Sperp[ii] / (rhoh_min * z * z + Bsq));
                             // P->U for any modified zones
                             Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
+                            Real rhou0_new = U(m_u.RHO, k, j, i);
+                            Real Ttt_new = U(m_u.UU, k, j, i); // - rhou0_new;
+                            Real Ttr_new = U(m_u.U1, k, j, i);
+                            Real Ttrnet_new = U(m_u.U1, k, j, i) - P(m_p.RHO, k, j, i) * P(m_p.U1, k, j, i) * G.gdet(Loci::center, j, i);
+
+                            Real rhou0_diff = ((rhou0_new - rhou0_old) / rhou0_old);
+                            Real Ttt_diff = ((Ttt_new - Ttt_old) / std::abs(Ttt_old));
+                            Real Ttr_diff = ((Ttr_new - Ttr_old) / Ttr_old);
+                            Real Ttrnet_diff = ((Ttrnet_new - Ttrnet_old) / Ttrnet_old);
+                            Real mindiff = 1e-3;
+
+                            //if ((std::abs(rhou0_diff) > mindiff) || (std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff))
+                            //    printf("rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
                         }
                     }
                 } else {
