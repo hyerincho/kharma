@@ -315,9 +315,12 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                                 }
                             }
                             rhoh = z;
-                            P(m_p.RHO, k, j, i) = rhoh - gam * u; //rhoflr_max;
-                            P(m_p.UU, k, j, i) = u; //uflr_max;
                             SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = gamma_max * (Spar[ii] / (rhoh * gamma_max * gamma_max) + Sperp[ii] / (rhoh * gamma_max * gamma_max + Bsq));
+                            FourVectors Dtmp;
+                            GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
+                            Real bsq = dot(Dtmp.bcon, Dtmp.bcov);
+                            P(m_p.UU, k, j, i) = -U(m_u.UU, k, j, i) / G.gdet(Loci::center, j, i) - bsq / 2.; //uflr_max;
+                            P(m_p.RHO, k, j, i) = rhoh - gam * P(m_p.UU, k, j, i); //rhoflr_max;
                             // P->U for any modified zones
                             Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
                             Real rhou0_new = U(m_u.RHO, k, j, i);
@@ -331,8 +334,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             Real Ttrnet_diff = ((Ttrnet_new - Ttrnet_old) / Ttrnet_old);
                             Real mindiff = 1e-3;
 
-                            if ((std::abs(rhou0_diff) > mindiff) || (std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff))
-                                printf("rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
+                            //if ((std::abs(rhou0_diff) > mindiff) || (std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff))
+                            //    printf("rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
                         }
                     }
                 } else {
