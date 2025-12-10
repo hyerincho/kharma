@@ -319,7 +319,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             FourVectors Dtmp;
                             GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
                             Real bsq = dot(Dtmp.bcon, Dtmp.bcov);
-                            P(m_p.UU, k, j, i) = (-U(m_u.UU, k, j, i) / G.gdet(Loci::center, j, i) - gamma_max * gamma_max * (rhoh + bsq) + rhoh * gamma_max + bsq / 2. - Dtmp.bcon[0] * Dtmp.bcov[0]) / (gam * (gamma_max - 1.) + 1.);
+                            P(m_p.UU, k, j, i) = (-U(m_u.UU, k, j, i) / G.gdet(Loci::center, j, i) + (rhoh + bsq) * Dtmp.ucon[0] * Dtmp.ucov[0] - Dtmp.bcon[0] * Dtmp.bcov[0] + rhoh * Dtmp.ucon[0]) / (gam * (Dtmp.ucon[0] - 1.) + 1.);
                             P(m_p.RHO, k, j, i) = rhoh - gam * P(m_p.UU, k, j, i); //rhoflr_max;
                             // P->U for any modified zones
                             Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
