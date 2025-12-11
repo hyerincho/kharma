@@ -186,6 +186,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
     const auto& G = pmb->coords;
     const EMHD::EMHD_parameters& emhd_params = EMHD::GetEMHDParameters(pmb->packages);
+    int active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
 
     // Get the primitives from our conserved versions
     // Notice by default, we recover variables for only the physical (interior or interior-ghost)
@@ -194,7 +195,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                           ? KDomain::GetPhysicalRange(rc) : KDomain::GetRange(rc, domain, coarse);
     bool mixed_inverter = false;
     if constexpr (inverter == Inverter::Type::mixed) mixed_inverter = true;
-    pmb->par_for("U_to_P", b.ks, b.ke, b.js, b.je, b.is, b.ie,
+    pmb->par_for("U_to_P", b.ks, b.ke, b.js, b.je, active_iin, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             int pflagl;
             if (mixed_inverter) {
@@ -262,7 +263,13 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         Real rhou0_old = U(m_u.RHO, k, j, i);
                         Real Ttt_old = U(m_u.UU, k, j, i); // - rhou0_old;
                         Real Ttr_old = U(m_u.U1, k, j, i);
+                        Real Ttth_old = U(m_u.U2, k, j, i);
+                        Real Ttphi_old = U(m_u.U2, k, j, i);
                         Real Ttrnet_old = U(m_u.U1, k, j, i) - P(m_p.RHO, k, j, i) * Dtmp.ucov[1] * G.gdet(Loci::center, j, i);
+                        Real rho_old = P(m_p.RHO, k, j, i);
+                        Real ucov1_old = Dtmp.ucov[1];
+                        Real ucov2_old = Dtmp.ucov[2];
+                        Real ucov3_old = Dtmp.ucov[3];
 
                         const Real rho_1 = m::sqrt(Ssq) / (gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)) * (h * gamma_max - alpha));
                         Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
@@ -336,8 +343,9 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             Real Ttrnet_diff = ((Ttrnet_new - Ttrnet_old) / Ttrnet_old);
                             Real mindiff = 1e-3;
 
-                            //if ((std::abs(rhou0_diff) > mindiff) || (std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff))
-                            //    printf("rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
+                            if ((std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff))
+                                printf("(i,j,k)=(%d,%d,%d), rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", i,j,k, rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
+                                //printf("(i,j,k)=(%d,%d,%d), rhoold=%.5g, ucov=(%.5g,%.5g,%.5g), alpha=%.5g, rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g), Ttth=%.3g Ttphi%.3g\n", i,j,k, rho_old, ucov1_old, ucov2_old, ucov3_old, alpha, rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff, Ttth_old, Ttphi_old);
                         }
                     }
                 } else {
