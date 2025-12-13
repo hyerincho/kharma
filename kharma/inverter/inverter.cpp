@@ -263,7 +263,13 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         Real rhou0_old = U(m_u.RHO, k, j, i);
                         Real Ttt_old = U(m_u.UU, k, j, i); // - rhou0_old;
                         Real Ttr_old = U(m_u.U1, k, j, i);
+                        Real Ttth_old = U(m_u.U2, k, j, i);
+                        Real Ttphi_old = U(m_u.U3, k, j, i);
                         Real Ttrnet_old = U(m_u.U1, k, j, i) - P(m_p.RHO, k, j, i) * Dtmp.ucov[1] * G.gdet(Loci::center, j, i);
+                        Real rho_old = P(m_p.RHO, k, j, i);
+                        Real ucov1_old = Dtmp.ucov[1];
+                        Real ucov2_old = Dtmp.ucov[2];
+                        Real ucov3_old = Dtmp.ucov[3];
 
                         const Real rhoh_1 = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)));
                         Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
@@ -274,7 +280,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             //uflr_max = u; // * rhoh_min/rhoh;
 
                             Real Bvec[] = {0.0, 0.0, 0.0};
-                            SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
+                            SPACELOOP(ii) Bvec[ii] = P(m_p.B1 + ii, k, j, i) * alpha;
                             Real BdotS = 0.;
                             SPACELOOP(ii) BdotS += Bvec[ii] * Scov[ii];
                             Real Bsq = 0.;
@@ -299,9 +305,9 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             Real fm = frhoh(zm);
                             Real fp = frhoh(zp);
 
-                            Real tol = 1e-8;
+                            Real tol = 1e-13;
                             int iter;
-                            for (iter = 0; iter < 30; ++iter) {
+                            for (iter = 0; iter < 100; ++iter) {
                                 z =  (zm*fp - zp*fm)/(fp-fm);  // linear interpolation to point f(z)=0
                                 Real f = frhoh(z);
                                 // Quit if convergence reached
@@ -321,7 +327,9 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = gamma_max * (Spar[ii] / (rhoh * gamma_max * gamma_max) + Sperp[ii] / (rhoh * gamma_max * gamma_max + Bsq));
                             GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
                             Real bsq = dot(Dtmp.bcon, Dtmp.bcov);
-                            P(m_p.UU, k, j, i) = (-U(m_u.UU, k, j, i) / G.gdet(Loci::center, j, i) + (rhoh + bsq) * Dtmp.ucon[0] * Dtmp.ucov[0] + bsq / 2. - Dtmp.bcon[0] * Dtmp.bcov[0] + rhoh * Dtmp.ucon[0]) / (gam * (Dtmp.ucon[0] - 1.) + 1.);
+                            Real u_temp = (-U(m_u.UU, k, j, i) / G.gdet(Loci::center, j, i) + (rhoh + bsq) * Dtmp.ucon[0] * Dtmp.ucov[0] + bsq / 2. - Dtmp.bcon[0] * Dtmp.bcov[0] + rhoh * Dtmp.ucon[0]) / (gam * (Dtmp.ucon[0] - 1.) + 1.);
+                            if (u_temp < 0) u_temp = u;
+                            P(m_p.UU, k, j, i) = u_temp;
                             P(m_p.RHO, k, j, i) = rhoh - gam * P(m_p.UU, k, j, i); //rhoflr_max;
                             // P->U for any modified zones
                             Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
@@ -336,8 +344,9 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             Real Ttrnet_diff = ((Ttrnet_new - Ttrnet_old) / Ttrnet_old);
                             Real mindiff = 1e-2;
 
-                            //if ((std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff))
-                            //    printf("(i,j,k)=(%d %d %d), rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", i,j,k,rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
+                            //if (((std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff)) && (k > 3) && (k < 68))
+                            //    printf("(i,j,k)=(%d,%d,%d), rhoold=%.5g, ucov=(%.5g,%.5g,%.5g), alpha=%.5g, rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g), Ttth=%.3g Ttphi %.3g B=(%.3g %.3g %.3g)\n", i,j,k, rho_old, ucov1_old, ucov2_old, ucov3_old, alpha, rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff, Ttth_old, Ttphi_old, P(m_p.B1,k,j,i), P(m_p.B2,k,j,i), P(m_p.B3,k,j,i));
+                                //printf("(i,j,k)=(%d %d %d), rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", i,j,k,rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
                         }
                     }
                 } else {
