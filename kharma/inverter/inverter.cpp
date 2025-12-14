@@ -264,7 +264,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         Real Ttt_old = U(m_u.UU, k, j, i); // - rhou0_old;
                         Real Ttr_old = U(m_u.U1, k, j, i);
                         Real Ttth_old = U(m_u.U2, k, j, i);
-                        Real Ttphi_old = U(m_u.U2, k, j, i);
+                        Real Ttphi_old = U(m_u.U3, k, j, i);
                         Real Ttrnet_old = U(m_u.U1, k, j, i) - P(m_p.RHO, k, j, i) * Dtmp.ucov[1] * G.gdet(Loci::center, j, i);
                         Real rho_old = P(m_p.RHO, k, j, i);
                         Real ucov1_old = Dtmp.ucov[1];
