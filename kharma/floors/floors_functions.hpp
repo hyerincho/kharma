@@ -65,7 +65,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
     const GReal r_eh = G.coords.get_horizon();
 
     // 1. Limit gamma with respect to normal observer
-    if (floors.radius_dependent_gamma_max > 0 && G.r(k, j, i) > 1.5 * r_eh) {
+    if ((!floors.use_rho_to_slow) && floors.radius_dependent_gamma_max > 0 && G.r(k, j, i) > 1.5 * r_eh) {
         Real V02 = m::pow(myfloors.V0, 2.);
         Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, floors.rs_bondi);
         Real betagamma2_max = V02 * vchar2;
