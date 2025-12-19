@@ -256,7 +256,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         const int radius_dependent_gamma_max = inverter_floors.radius_dependent_gamma_max;
                         if (radius_dependent_gamma_max > 0 && G.r(k, j, i) > 3) {
                             Real V02 = m::pow(inverter_floors.V0, 2.);
-                            Real vchar2 = 1. / m::sqrt(G.r(k, j, i)) + 1. / m::sqrt(Multizone::CalcRB(gam, inverter_floors.rs_bondi));
+                            Real vchar2 = 1. / G.r(k, j, i) + 1. / Multizone::CalcRB(gam, inverter_floors.rs_bondi);
                             Real betagamma2_max = V02 * vchar2;
                             gamma_max = m::sqrt(betagamma2_max + 1.);
                         }
