@@ -224,16 +224,15 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                     // Add a floor to density which controls wayward velocities
                     if (fflagl && inverter_floors.use_rho_to_slow) {
                         // Calculate necessary rho
-                        const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
-                        const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
-                        Real rhoh = rho + gam * u;
+                        Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
+                        Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
                         const Real alpha  = 1. / m::sqrt(-G.gcon(Loci::center, j, i, 0, 0));
                         const Real a_over_g = alpha / G.gdet(Loci::center, j, i);
                         FourVectors Dtmp;
                         GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
-                        Real Scov[3] = {U(m_u.U1, k, j, i) * a_over_g,
-                                        U(m_u.U2, k, j, i) * a_over_g,
-                                        U(m_u.U3, k, j, i) * a_over_g};
+                        Real Scov[3] = {U(m_u.U1, k, j, i) * a_over_g - P(m_p.RHO, k, j, i) * Dtmp.ucov[1] * alpha,
+                                        U(m_u.U2, k, j, i) * a_over_g - P(m_p.RHO, k, j, i) * Dtmp.ucov[2] * alpha,
+                                        U(m_u.U3, k, j, i) * a_over_g - P(m_p.RHO, k, j, i) * Dtmp.ucov[3] * alpha};
                         Real Scon[3];
                         Real gupper[GR_DIM][GR_DIM], glower[GR_DIM][GR_DIM];
                         G.gcon(Loci::center, j, i, gupper);
@@ -271,7 +270,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         Real ucov2_old = Dtmp.ucov[2];
                         Real ucov3_old = Dtmp.ucov[3];
 
-                        const Real rhoh_1 = m::sqrt(Ssq) / (gamma_max * gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)));
+                        const Real rho_1 = m::sqrt(Ssq) / (gamma_max * m::sqrt(1. - 1. / (gamma_max * gamma_max)) * (gamma_max - alpha));
                         Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
                         if (gamma > gamma_max) {
                             fflagl |= Floors::FFlag::INVERTER_GAMMA;
@@ -291,25 +290,31 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             SPACELOOP(ii) Spar[ii] = BdotS * Bvec[ii] / Bsq;
                             SPACELOOP(ii) Sperp[ii] = Scon[ii] - Spar[ii];
 
+                            if ((Sparsq / SQR(gam * u * gamma_max * gamma_max) + Sperpsq / SQR(gam * u * gamma_max * gamma_max + Bsq) + 1. / SQR(gamma_max) - 1.) < 0){
+                                // if f(0) < 0, make u smaller to guarantee a solution
+                                Real utemp = m::sqrt(Sparsq) / (gam * SQR(gamma_max) * m::sqrt(1. - 1. / SQR(gamma_max)));
+                                u = utemp;
+                            }
+
                     		// Equation for Lorentz factor W
-                            auto frhoh = [&] (Real rhoh) {
-                                const Real rhohW2 = rhoh*gamma_max*gamma_max;
-                                return Sparsq / SQR(rhohW2)
-                                        + Sperpsq / SQR(rhohW2 + Bsq)
+                            auto frho = [&] (Real rhosol) {
+                                const Real denom = (rhosol + gam * u) * gamma_max * gamma_max - rhosol * alpha * gamma_max;
+                                return Sparsq / SQR(denom)
+                                        + Sperpsq / SQR(denom + Bsq)
                                         + 1./(gamma_max*gamma_max) - 1.;
                             };
 
-                            Real zm = std::min(rho / 100., rhoh_1 / 100.);
-                            Real zp = rhoh_1; //gamma_max;
+                            Real zm = std::min(rho / 100., rho_1 / 100.);
+                            Real zp = rho_1; //gamma_max;
                             Real z = 0.5*(zm + zp);
-                            Real fm = frhoh(zm);
-                            Real fp = frhoh(zp);
+                            Real fm = frho(zm);
+                            Real fp = frho(zp);
 
                             Real tol = 1e-13;
                             int iter;
                             for (iter = 0; iter < 100; ++iter) {
                                 z =  (zm*fp - zp*fm)/(fp-fm);  // linear interpolation to point f(z)=0
-                                Real f = frhoh(z);
+                                Real f = frho(z);
                                 // Quit if convergence reached
                                 if ((m::abs(zm-zp) < tol) || (m::abs(f) < tol)) {
                                     break;
@@ -323,14 +328,13 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                                     fp = f;
                                 }
                             }
-                            rhoh = z;
-                            SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = gamma_max * (Spar[ii] / (rhoh * gamma_max * gamma_max) + Sperp[ii] / (rhoh * gamma_max * gamma_max + Bsq));
+                            rho = z;
+                            SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = gamma_max * (Spar[ii] / ((rho + gam * u) * gamma_max * gamma_max - rho * alpha * gamma_max) +
+                                    Sperp[ii] / ((rho + gam * u) * gamma_max * gamma_max + Bsq - rho * alpha * gamma_max));
                             GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
                             Real bsq = dot(Dtmp.bcon, Dtmp.bcov);
-                            Real u_temp = (-U(m_u.UU, k, j, i) / G.gdet(Loci::center, j, i) + (rhoh + bsq) * Dtmp.ucon[0] * Dtmp.ucov[0] + bsq / 2. - Dtmp.bcon[0] * Dtmp.bcov[0] + rhoh * Dtmp.ucon[0]) / (gam * (Dtmp.ucon[0] - 1.) + 1.);
-                            if (u_temp < 0) u_temp = u;
-                            P(m_p.UU, k, j, i) = u_temp;
-                            P(m_p.RHO, k, j, i) = rhoh - gam * P(m_p.UU, k, j, i); //rhoflr_max;
+                            P(m_p.RHO, k, j, i) = rho;
+                            P(m_p.UU, k, j, i) = u;//(h - 1.) * rho / gam;
                             // P->U for any modified zones
                             Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
                             Real rhou0_new = U(m_u.RHO, k, j, i);
@@ -346,7 +350,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
                             //if (((std::abs(Ttt_diff) > mindiff) || (std::abs(Ttr_diff) > mindiff)) && (k > 3) && (k < 68))
                             //    printf("(i,j,k)=(%d,%d,%d), rhoold=%.5g, ucov=(%.5g,%.5g,%.5g), alpha=%.5g, rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g), Ttth=%.3g Ttphi %.3g B=(%.3g %.3g %.3g)\n", i,j,k, rho_old, ucov1_old, ucov2_old, ucov3_old, alpha, rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff, Ttth_old, Ttphi_old, P(m_p.B1,k,j,i), P(m_p.B2,k,j,i), P(m_p.B3,k,j,i));
-                                //printf("(i,j,k)=(%d %d %d), rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", i,j,k,rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
+                                //printf("(i,j,k)=(%d,%d,%d), rhou0 = %.3g->%.3g (%.3g), Ttt = %.3g->%.3g (%.3g), Ttr = %.3g->%.3g (%.3g), Ttrnet = %.3g->%.3g (%.3g)\n", i,j,k,rhou0_old, rhou0_new, rhou0_diff, Ttt_old, Ttt_new, Ttt_diff, Ttr_old, Ttr_new, Ttr_diff, Ttrnet_old, Ttrnet_new, Ttrnet_diff);
                         }
                     }
                 } else {
