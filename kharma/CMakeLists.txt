@@ -37,6 +37,7 @@ AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/multizone EXE_NAME_SRC)
 AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/ismr EXE_NAME_SRC)
 AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/reductions EXE_NAME_SRC)
 AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/wind EXE_NAME_SRC)
+AUX_SOURCE_DIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/cooling EXE_NAME_SRC)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/prob)
@@ -64,6 +65,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/multizone)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/ismr)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/reductions)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/wind)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cooling)
 
 # generate version.cpp file from current git commit in a way that
 # 1. Re-generates if hash changes

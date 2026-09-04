@@ -58,6 +58,7 @@
 #include "reductions.hpp"
 #include "emhd.hpp"
 #include "wind.hpp"
+#include "cooling.hpp"
 #include "multizone.hpp"
 
 #include "bondi.hpp"
@@ -424,6 +425,9 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     }
     if (pin->GetOrAddBoolean("wind", "on", false)) {
         auto t_wind = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Wind::Initialize, pin.get());
+    }
+    if (pin->GetOrAddBoolean("cooling", "on", false)) {
+        auto t_cooling = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Cooling::Initialize, pin.get());
     }
     if (pin->GetOrAddBoolean("multizone", "on", false)) {
         auto t_multizone = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Multizone::Initialize, pin.get());

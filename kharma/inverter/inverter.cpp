@@ -186,13 +186,16 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
     const auto& G = pmb->coords;
     const EMHD::EMHD_parameters& emhd_params = EMHD::GetEMHDParameters(pmb->packages);
-    int active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
 
     // Get the primitives from our conserved versions
     // Notice by default, we recover variables for only the physical (interior or interior-ghost)
     // zones!  These are the only ones which are filled at our point in the step
     const IndexRange3 b = (domain == IndexDomain::entire)
                           ? KDomain::GetPhysicalRange(rc) : KDomain::GetRange(rc, domain, coarse);
+    int active_iin = b.is;
+    const bool multizone_onemb = (pmb->packages.Get("Driver")->Param<DriverType>("type") == DriverType::multizone_onemb);
+    if (multizone_onemb)
+        active_iin = pmb->packages.Get("Multizone")->Param<int>("active_iin");
     bool mixed_inverter = false;
     if constexpr (inverter == Inverter::Type::mixed) mixed_inverter = true;
     pmb->par_for("U_to_P", b.ks, b.ke, b.js, b.je, active_iin, b.ie,
