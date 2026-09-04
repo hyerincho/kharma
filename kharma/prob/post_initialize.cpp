@@ -84,6 +84,10 @@ void KHARMA::PostInitialize(ParameterInput *pin, Mesh *pmesh, bool is_restart)
 
             // Then init B field over the mesh...
             SeedBField(md.get(), pin);
+            
+            if (pkgs.count("B_CT") and prob_name == "gizmo") { // TODO: this the problem. why?
+                B_CT::DangerousPtoU(md.get(), IndexDomain::interior, false);
+            }
 
             // If we're doing a torus problem or explicitly ask for it,
             // normalize the magnetic field according to the max density

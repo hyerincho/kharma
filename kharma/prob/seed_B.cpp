@@ -98,6 +98,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
     const bool should_fill = !(fname_fill == "none");
     Real fx1min, fx1max, dx1, fx1min_ghost;
     int n1tot, fnghost;
+    Real r_shell;
     if (prob == "resize_restart_kharma") {
         fx1min = pin->GetReal("parthenon/mesh", "restart_x1min");
         fx1max = pin->GetReal("parthenon/mesh", "restart_x1max");
@@ -106,6 +107,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
         dx1 = (fx1max - fx1min) / n1tot;
         fx1min_ghost = fx1min - fnghost * dx1;
     }
+    else if (prob == "gizmo") r_shell = pmb->packages.Get("GRMHD")->Param<Real>("r_shell");
 
     // Indices
     // TODO handle filling faces with domain < entire more gracefully
@@ -192,6 +194,25 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
             );
             // Update primitive variables
             B_CT::BlockUtoP(rc, domain);
+            if (prob == "gizmo") {
+                // only fill cell-centered B field for now, PtoU in post_initialize
+                GridVector B_Save = rc->Get("B_Save").data;
+                GridVector B_P = rc->Get("prims.B").data;
+                // Hyerin (12/19/22) copy over data after initialization
+                pmb->par_for(
+                    "B_field_B_3D", b.ks, b.ke, b.js, b.je, b.is, b.ie,
+                    KOKKOS_LAMBDA(const int &k, const int &j, const int &i) {
+                        GReal X_embed[GR_DIM];
+                        G.coord_embed(k, j, i, Loci::face1, X_embed);
+
+                        if ((X_embed[1] < r_shell)) {// if cannot be read from restart file
+                            // do nothing. just use the initialization from SeedBField
+                        } else {
+                            VLOOP B_P(v, k, j, i) = B_Save(v, k, j, i);
+                        }
+
+                    });
+            }
         } else if (pkgs.count("B_FluxCT")) {
             GridVector B_P = rc->Get("prims.B").data;
             pmb->par_for(
@@ -379,9 +400,29 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                         }
 
                     });
+            } else if (prob == "gizmo") {
+                // only fill cell-centered B field for now, PtoU in post_initialize
+                GridVector B_Save = rc->Get("B_Save").data;
+                GridVector B_P = rc->Get("prims.B").data;
+                B_CT::BlockUtoP(rc, domain);
+                // Hyerin (12/19/22) copy over data after initialization
+                pmb->par_for(
+                    "B_field_B_3D", be.ks, be.ke, be.js, be.je, be.is, be.ie,
+                    KOKKOS_LAMBDA(const int &k, const int &j, const int &i) {
+                        GReal X_embed[GR_DIM];
+                        G.coord_embed(k, j, i, Loci::face1, X_embed);
 
+                        if ((X_embed[1] < r_shell)) {// if cannot be read from restart file
+                            // do nothing. just use the initialization from SeedBField
+                            if (i==10 && j==36 && k == 36) printf("HYERIN: B_P (%.3g, %.3g, %.3g) \n",
+                                                        B_P(0,k,j,i), B_P(1,k,j,i), B_P(2,k,j,i));
+                        } else {
+                            VLOOP B_P(v, k, j, i) = B_Save(v, k, j, i);
+                        }
+
+                    });
             }
-            B_CT::BlockUtoP(rc, domain);
+            if (prob != "gizmo") B_CT::BlockUtoP(rc, domain);
             //std::cout << "Block divB: " << B_CT::BlockMaxDivB(rc) << std::endl;
         } else if (pkgs.count("B_FluxCT")) {
             // Calculate B-field.  Curl can be run all together since

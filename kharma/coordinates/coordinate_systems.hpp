@@ -188,8 +188,8 @@ class SphKSExtG {
         const GReal a;
         static constexpr bool spherical = true;
 
-        static constexpr GReal A = 4.24621057e-9; //1.46797639e-8;
-        static constexpr GReal B = 1.35721335; //1.29411117;
+        static constexpr GReal A = 6.2616e-12; //4.24621057e-9; //1.46797639e-8;
+        static constexpr GReal B = 1.6251; //1.35721335; //1.29411117;
 
         KOKKOS_FUNCTION SphKSExtG(GReal spin): a(spin) {};
 
@@ -320,8 +320,8 @@ class SphBLExtG {
         const GReal a;
         static constexpr bool spherical = true;
 
-        static constexpr GReal A = 4.24621057e-9; //1.46797639e-8;
-        static constexpr GReal B = 1.35721335; //1.29411117;
+        static constexpr GReal A = 6.2616e-12; //4.24621057e-9; //1.46797639e-8;
+        static constexpr GReal B = 1.6251; //1.35721335; //1.29411117;
 
         KOKKOS_FUNCTION SphBLExtG(GReal spin): a(spin) {}
 
