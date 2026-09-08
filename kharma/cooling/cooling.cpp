@@ -87,18 +87,20 @@ TaskStatus Cooling::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDo
             // Following eq.7 of Avara+24
             GReal rho = P(b, m_p.RHO, k, j, i);
             GReal u = P(b, m_p.UU, k, j, i);
-            GReal Omega = 1. / (a + SQR(r * r * r));
+            GReal Omega = 1. / (a + m::sqrt(r * r * r));
             GReal torb = 2. * M_PI / Omega;
             GReal S = (gam - 1.) * u / m::pow(rho, gam); // entropy
-            GReal L = u * SQR(S / Sstar - 1.) / torb;
             
             // evaluate Be
             FourVectors D;
             GRMHD::calc_4vecs(G, P(b), m_p, k, j, i, Loci::center, D);
             GReal bsq = dot(D.bcon, D.bcov);
-            GReal Be = -(1. + (gam * u + bsq) / rho) - 1.;// Bernoulli parameter (Penna+13)
+            GReal Be = -(1. + (gam * u + bsq) / rho) * D.ucov[0] - 1.;// Bernoulli parameter (Penna+13)
 
-            if ((S <= Sstar) && (Be > 0)) L = 0.;
+            // evaluate L
+            GReal L;
+            if ((S <= Sstar) || (Be > 0)) L = 0.;
+            else L = u * m::sqrt(S / Sstar - 1.) / torb;
 
             Real new_du[GR_DIM] = {0};
             for (int lam = 0; lam < GR_DIM; ++lam)
