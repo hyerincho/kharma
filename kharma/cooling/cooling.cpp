@@ -40,11 +40,18 @@ std::shared_ptr<KHARMAPackage> Cooling::Initialize(ParameterInput *pin, std::sha
     Params &params = pkg->AllParams();
 
     // Cooling term
-    std::vector<std::string> cooling_options = {"noble"};
+    std::vector<std::string> cooling_options = {"noble", "beta"};
     std::string cooling_type = pin->GetOrAddString("cooling", "type", "noble", cooling_options);
     params.Add("cooling_type", cooling_type);
+    // Device-safe enum, since KOKKOS_LAMBDA kernels can't compare std::string
+    CoolingType cooling_type_enum = (cooling_type == "beta") ? CoolingType::beta : CoolingType::noble;
+    params.Add("cooling_type_enum", cooling_type_enum);
     Real target_entropy = pin->GetOrAddReal("cooling", "target_entropy", 0.01);
+    Real target_scaleheight = pin->GetOrAddReal("cooling", "target_scaleheight", 0.1);
+    Real beta = pin->GetOrAddReal("cooling", "beta", 1.0);
     params.Add("target_entropy", target_entropy);
+    params.Add("target_scaleheight", target_scaleheight);
+    params.Add("beta", beta);
 
     pkg->AddSource = Cooling::AddSource;
 
@@ -72,7 +79,10 @@ TaskStatus Cooling::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDo
     const IndexRange block = IndexRange{0, dUdt.GetDim(5) - 1};
     const Real gam = gpars.Get<Real>("gamma");
     const Real Sstar = pars.Get<Real>("target_entropy");
-    
+    const Real target_scaleheight = pars.Get<Real>("target_scaleheight");
+    const Real beta_cool = pars.Get<Real>("beta");
+    const Cooling::CoolingType cooling_type = pars.Get<Cooling::CoolingType>("cooling_type_enum");
+
 
     pmb0->par_for("add_cooling", block.s, block.e, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
@@ -84,23 +94,35 @@ TaskStatus Cooling::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDo
             GReal r = Xembed[1], th = Xembed[2];
             GReal a = G.coords.get_a();
 
-            // Following eq.7 of Avara+24
             GReal rho = P(b, m_p.RHO, k, j, i);
             GReal u = P(b, m_p.UU, k, j, i);
             GReal Omega = 1. / (a + m::sqrt(r * r * r));
             GReal torb = 2. * M_PI / Omega;
-            GReal S = (gam - 1.) * u / m::pow(rho, gam); // entropy
-            
-            // evaluate Be
+
+            // Needed by the source-term application below regardless of cooling type
             FourVectors D;
             GRMHD::calc_4vecs(G, P(b), m_p, k, j, i, Loci::center, D);
             GReal bsq = dot(D.bcon, D.bcov);
-            GReal Be = -(1. + (gam * u + bsq) / rho) * D.ucov[0] - 1.;// Bernoulli parameter (Penna+13)
+            GReal sigma = bsq / rho;
 
             // evaluate L
             GReal L;
-            if ((S <= Sstar) || (Be > 0)) L = 0.;
-            else L = u * m::sqrt(S / Sstar - 1.) / torb;
+            if (cooling_type == Cooling::CoolingType::beta) {
+                // "Beta cooling" toward a target scale height, on a timescale beta/Omega.
+                // One-directional like "noble": only ever cools (T > Ttarget), never heats.
+                GReal T = (gam - 1.) * u / rho; // temperature (Theta)
+                GReal Ttarget = (M_PI / 2.) * SQR(target_scaleheight * r * Omega);
+                GReal Be = -(1. + (gam * u + bsq) / rho) * D.ucov[0] - 1.;// Bernoulli parameter (Penna+13)
+                if ((T <= Ttarget) || (sigma > 5) && (r > 10)) L = 0.;
+                else L = rho * (T - Ttarget) / (gam - 1.) * Omega / beta_cool;
+            } else {
+                // Following eq.7 of Avara+24
+                GReal S = (gam - 1.) * u / m::pow(rho, gam); // entropy
+
+
+                if ((S <= Sstar) || ((sigma > 5) && (r > 10))) L = 0.;
+                else L = u * m::sqrt(S / Sstar - 1.) / torb;
+            }
 
             Real new_du[GR_DIM] = {0};
             for (int lam = 0; lam < GR_DIM; ++lam)
