@@ -12,7 +12,7 @@ if [[ $HOST == *".delta.internal.ncsa.edu" || $HOST == *".delta.ncsa.illinois.ed
 then
   HOST_ARCH=ZEN3
   DEVICE_ARCH=AMPERE80
-  MPI_EXE=srun #mpirun #
+  MPI_EXE=mpirun #srun #
   NPROC=64
 
   module purge
@@ -23,6 +23,10 @@ then
     # GPU Compile
     if [[ "$ARGS" == *"4gpu"* ]]; then
       # 4-device MPI w/mapping, should play nice with different numbers
+      MPI_NUM_PROCS=4 #${MPI_NUM_PROCS:-4}
+      #MPI_EXTRA_ARGS="--map-by ppr:$MPI_NUM_PROCS:node:pe=16"
+    fi
+    if [[ "$ARGS" == *"gpus"* ]]; then
       MPI_NUM_PROCS=${MPI_NUM_PROCS:-4}
       MPI_EXTRA_ARGS="--map-by ppr:$MPI_NUM_PROCS:node:pe=16"
     fi
@@ -33,11 +37,16 @@ then
     fi
 
     if [[ $ARGS == *"gcc"* ]]; then
-      module load gcc/11.4.0 cuda/11.8.0 openmpi/4.1.5+cuda
+      module load gcc/11.4.0 cuda/11.8 openmpi/4.1.5+cuda
       C_NATIVE=gcc
       CXX_NATIVE=g++
     elif [[ $ARGS == *"cray"* ]]; then
-      module load PrgEnv-gnu cuda craype-x86-milan craype-accel-ncsa
+      module load gcc-native/13.2
+      module load PrgEnv-gnu/8.6.0 craype-x86-milan
+      # craype-accel-ncsa
+      module list
+      module load cray-mpich/8.1.32
+      module load cuda
       export MPICH_GPU_SUPPORT_ENABLED=1
       export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=1
       C_NATIVE=cc
