@@ -39,6 +39,9 @@
 
 namespace Cooling {
 
+// Device-safe representation of "cooling/type", set once on the host in Initialize()
+enum CoolingType{noble=0, beta};
+
 /**
  * Initialize the cooling package with several options from the input deck
  */
